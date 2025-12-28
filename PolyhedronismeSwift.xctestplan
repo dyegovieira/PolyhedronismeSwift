@@ -1,0 +1,24 @@
+{
+  "configurations" : [
+    {
+      "id" : "20FCF352-06B3-4062-9D34-C1689C6CD8A2",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "performanceAntipatternCheckerEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "PolyhedronismeSwiftTests",
+        "name" : "PolyhedronismeSwiftTests"
+      }
+    }
+  ],
+  "version" : 1
+}

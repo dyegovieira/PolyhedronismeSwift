@@ -1,0 +1,163 @@
+######################################################################
+# SWIFT 6.2 • APPLE SDK 26 • CURSOR IDE ARCHITECTURE RULESET (2025)
+######################################################################
+
+###############################################################################
+# 1. GLOBAL ARCHITECTURE
+###############################################################################
+# Business logic is isolated in services and actors.
+# Prefer Apple-native frameworks: Combine (light), RealityKit, Metal,
+# CoreGraphics, CoreAnimation, Vision, CoreML, FoundationModels.
+# SceneKit allowed only for legacy assets.
+# Apply SOLID principles and pure SwiftPM structure.
+# Custom abstractions allowed when they increase modularity, testability, or
+# safety (e.g., MetalWrapper, pipeline factories, registries).
+# No inline comments. No git commands. No auto commits.
+###############################################################################
+
+###############################################################################
+# 2. TYPE SAFETY & ERROR MODELING
+###############################################################################
+# No force unwraps, no `try!`, no implicitly unwrapped optionals.
+# Every error uses a dedicated enum/struct; Error types should live in Errors/.
+# Avoid [Any], AnyObject, or unchecked type erasure.
+# Public APIs require Swift doc comments ///.
+###############################################################################
+
+###############################################################################
+# 3. STRICT SWIFT 6.2 CONCURRENCY
+###############################################################################
+# Use structured concurrency everywhere: async/await, actors, isolated state.
+# Avoid DetachedTask; prefer Task(priority:) usage.
+# All cross-actor types must conform to Sendable.
+# No @unchecked Sendable except test mocks created externally.
+###############################################################################
+
+###############################################################################
+# 4. METAL + GPU RULES
+###############################################################################
+# All Metal usage must be isolated behind an abstraction layer:
+#   - MetalWrapper.swift for centralized imports & initialization
+#   - ComputePipelineFactory actor for safe async pipeline creation & caching
+#
+# Requirements:
+#   • Never import Metal outside the abstraction layer.
+#   • All GPU pipelines must auto-fallback to CPU implementations.
+#   • No GPU workloads on the main thread.
+#   • All shaders must be defined in .metal files (no inline MSL).
+#   • RealityKit heavy operations must be off-main.
+###############################################################################
+
+###############################################################################
+# 5. API DESIGN GUIDELINES
+###############################################################################
+# Public APIs must be minimal, deterministic, and strongly typed.
+# Use AsyncThrowingStream for async progress.
+# Prefer protocol-driven design with registry/factory extensibility.
+# Avoid delegates for async flows.
+###############################################################################
+
+###############################################################################
+# 6. CONFIGURATION RULES
+###############################################################################
+# All runtime configuration must be managed through a dedicated Configuration
+# actor. No global mutable configuration, no shared singletons.
+###############################################################################
+
+###############################################################################
+# 7. FILE TYPE RULES
+###############################################################################
+fileTypes:
+  swift:
+    instructions: |
+      Write idiomatic Swift 6.2 with strict concurrency rules.
+      Keep logic in actors/services.
+
+  metal:
+    instructions: |
+      Use pure, isolated MSL shaders in dedicated .metal files.
+      No inline shader code. Keep kernels modular.
+
+  markdown:
+    instructions: |
+      Use clean documentation with clear sections, lists, and code blocks.
+
+  json:
+    instructions: |
+      Provide minimal, clean, strictly typed JSON. No comments.
+###############################################################################
+
+###############################################################################
+# 8. SWIFTPM BUILD, TEST, AND CODE COVERAGE COMMANDS
+###############################################################################
+commands:
+
+  swift_build:
+    run: |
+      swift build \
+        --disable-sandbox \
+        > .cursor_build_log.txt 2>&1
+    description: "Build Swift package"
+
+  swift_coverage_summary:
+    run: |
+      CODE_COV_DIR=$(find .build -type d -name "codecov" | head -1)
+      if [ -z "$CODE_COV_DIR" ] || [ ! -d "$CODE_COV_DIR" ] || [ -z "$(ls -A "$CODE_COV_DIR"/*.profraw 2>/dev/null)" ]; then
+        echo "❌ No coverage data found. Run 'swift_test_coverage' first."
+        exit 1
+      fi
+      
+      echo "📊 Merging coverage data..."
+      xcrun llvm-profdata merge -sparse "$CODE_COV_DIR"/*.profraw -o "$CODE_COV_DIR/default.profdata" 2>&1
+      
+      XCTEST_PATH=$(find .build -name "*PackageTests.xctest" -type d | head -1)
+      if [ -z "$XCTEST_PATH" ]; then
+        echo "❌ Test bundle not found. Run 'swift_test_coverage' first."
+        exit 1
+      fi
+      
+      BINARY_PATH="$XCTEST_PATH/Contents/MacOS/$(basename "$XCTEST_PATH" .xctest)"
+      ARCH=$(uname -m)
+      
+      echo "📈 Code Coverage Summary:"
+      echo ""
+      xcrun llvm-cov report "$BINARY_PATH" \
+        -instr-profile="$CODE_COV_DIR/default.profdata" \
+        -ignore-filename-regex='Tests/' \
+        -arch="$ARCH" 2>&1 | tail -10
+    description: "Show code coverage summary with percentages"
+
+  swift_coverage_file:
+    run: |
+      CODE_COV_DIR=$(find .build -type d -name "codecov" | head -1)
+      if [ -z "$CODE_COV_DIR" ] || [ ! -d "$CODE_COV_DIR" ] || [ -z "$(ls -A "$CODE_COV_DIR"/*.profraw 2>/dev/null)" ]; then
+        echo "❌ No coverage data found. Run 'swift_test_coverage' first."
+        exit 1
+      fi
+      
+      echo "📊 Merging coverage data..."
+      xcrun llvm-profdata merge -sparse "$CODE_COV_DIR"/*.profraw -o "$CODE_COV_DIR/default.profdata" 2>&1 > /dev/null
+      
+      XCTEST_PATH=$(find .build -name "*PackageTests.xctest" -type d | head -1)
+      if [ -z "$XCTEST_PATH" ]; then
+        echo "❌ Test bundle not found. Run 'swift_test_coverage' first."
+        exit 1
+      fi
+      
+      BINARY_PATH="$XCTEST_PATH/Contents/MacOS/$(basename "$XCTEST_PATH" .xctest)"
+      ARCH=$(uname -m)
+      
+      echo "📈 Generating line-by-line coverage report for all files..."
+      echo "Output: .cursor_coverage_detailed.txt"
+      echo ""
+      xcrun llvm-cov show "$BINARY_PATH" \
+        -instr-profile="$CODE_COV_DIR/default.profdata" \
+        -show-line-counts-or-regions \
+        -show-instantiations=false \
+        -ignore-filename-regex='Tests/' \
+        -arch="$ARCH" 2>&1 > .cursor_coverage_detailed.txt
+      
+      echo "✅ Detailed coverage report saved to .cursor_coverage_detailed.txt"
+      echo "Use: grep -A 5 -B 5 '<filename>' .cursor_coverage_detailed.txt to view specific file"
+    description: "Generate detailed line-by-line coverage report for all files"
+###############################################################################
