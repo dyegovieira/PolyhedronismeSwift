@@ -1,0 +1,51 @@
+Recipe tu3I Performance Measurement
+====================================
+
+Test Execution Results:
+-----------------------
+The test for recipe "tu3I" was executed, but crashes due to a Metal assertion error:
+"-[_MTLCommandBuffer addCompletedHandler:]:1011: failed assertion `Completed handler provided after commit call'"
+
+However, the generation does complete (we see "tu3I executed as dkdu3I" in the output) before the crash.
+
+Shell Timing Measurements (test execution, excluding build):
+------------------------------------------------------------
+Run 1: Total time: 1.067 seconds (User: 0.50s, System: 0.24s)
+Run 2: Total time: 0.981 seconds (User: 0.49s, System: 0.20s)
+Average: ~1.024 seconds
+
+Note: These measurements exclude build time but include:
+- Test framework setup/teardown
+- Recipe generation time for "tu3I"
+- Metal-related operations
+- Test cleanup (though test crashes before cleanup completes)
+
+The actual generation time for "tu3I" is likely 0.8-0.9 seconds, accounting for test framework overhead.
+The variation between runs (0.98s - 1.07s) suggests some system overhead or caching effects.
+
+The test crashes after generation completes, preventing precise measurement from within the test code.
+
+Performance Analysis:
+--------------------
+The recipe "tu3I" is executed as "dkdu3I" internally, which suggests it involves:
+- Dual operation (d)
+- Kis operation (k) 
+- Dual operation again (d)
+- Trisub operation with parameter 3 (u3)
+- Starting from Icosahedron (I)
+
+This is a complex recipe involving multiple operations, which explains why it takes significant time.
+
+Recommendations for Performance Improvement:
+--------------------------------------------
+1. Fix the Metal command buffer assertion error - the addCompletedHandler must be called
+   BEFORE commit(), not after. This is in MetalCommandBufferWrapper.swift
+
+2. Consider caching intermediate results for repeated operations
+
+3. Profile the individual operations (dual, kis, trisub) to identify bottlenecks
+
+4. Consider parallelizing operations where possible
+
+5. Review Metal command buffer usage to ensure proper ordering of operations
+
