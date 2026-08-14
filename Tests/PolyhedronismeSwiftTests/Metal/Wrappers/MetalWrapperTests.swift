@@ -216,7 +216,7 @@ final class MetalWrapperTests: XCTestCase {
         }
         let wrapper = MetalCommandBufferWrapper(buffer: mtlBuffer)
         wrapper.commit()
-        await wrapper.completed()
+        try await wrapper.completed()
     }
     
     func testMetalComputeCommandEncoderWrapperInit() throws {

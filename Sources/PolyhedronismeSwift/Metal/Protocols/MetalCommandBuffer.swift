@@ -12,6 +12,6 @@ import Foundation
 internal protocol MetalCommandBuffer: Sendable {
     func makeComputeCommandEncoder() -> MetalComputeCommandEncoder?
     func commit()
-    func completed() async
+    func completed() async throws
 }
 

@@ -60,9 +60,9 @@ internal struct DefaultOperatorFactory: OperatorFactory {
         let params = KisParameters(n: n, apexDistance: apexDist)
         let cpuKis = KisOperator()
         
+        // Always use Metal with CPU fallback (better behavior)
         if let metalKis = MetalKisOperator(metalConfig: metalConfig, pipelineFactory: pipelineFactory) {
             let fallback = MetalFallbackParameterizedOperator(metalOperator: metalKis, cpuFallback: cpuKis, parameters: params)
-            // Fallback already has parameters, so use non-parameterized initializer
             return AnyOperatorApplicable(fallback)
         } else {
             return AnyOperatorApplicable(cpuKis, parameters: params)
@@ -81,14 +81,9 @@ internal struct DefaultOperatorFactory: OperatorFactory {
     }
     
     private func createDualOperator() async throws -> any PolyhedronOperatorApplicable {
+        // Always use CPU only (better behavior for Dual)
         let cpuDual = DualOperator()
-        
-        if let metalDual = MetalDualOperator(metalConfig: metalConfig, pipelineFactory: pipelineFactory) {
-            let fallback = MetalFallbackOperator(metalOperator: metalDual, cpuFallback: cpuDual)
-            return AnyOperatorApplicable(fallback)
-        } else {
-            return AnyOperatorApplicable(cpuDual)
-        }
+        return AnyOperatorApplicable(cpuDual)
     }
     
     private func createAmboOperator() async throws -> any PolyhedronOperatorApplicable {

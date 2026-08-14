@@ -68,7 +68,7 @@ internal struct MetalDualOperator: PolyhedronOperator {
         computeEncoder.dispatchThreadgroups(threadGroups, threadsPerThreadgroup: threadGroupSize)
         computeEncoder.endEncoding()
         commandBuffer.commit()
-        await commandBuffer.completed()
+        try await commandBuffer.completed()
         
         // 2. Read back centroids
         let pCentroids = centroidBuffer.contents().bindMemory(to: SIMD3<Float>.self, capacity: polyhedron.faces.count)

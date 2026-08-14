@@ -201,7 +201,11 @@ actor CanonicalizationPipelineActor {
         encoder.dispatchThreadgroups(groups, threadsPerThreadgroup: threads)
         encoder.endEncoding()
         commandBuffer.commit()
-        await commandBuffer.completed()
+        do {
+            try await commandBuffer.completed()
+        } catch {
+            return nil
+        }
         
         return readVertexBuffer(outBuffer, count: count)
     }
@@ -255,7 +259,11 @@ actor CanonicalizationPipelineActor {
         encoder.dispatchThreadgroups(groups, threadsPerThreadgroup: threads)
         encoder.endEncoding()
         commandBuffer.commit()
-        await commandBuffer.completed()
+        do {
+            try await commandBuffer.completed()
+        } catch {
+            return nil
+        }
         
         return readVertexBuffer(outBuffer, count: faceCount)
     }

@@ -446,5 +446,55 @@ final class PolyhedronismeSwiftGeneratorTests: XCTestCase {
             )
         }
     }
+    
+    // MARK: - Performance Test for tu3I
+    
+    func testTu3IPerformance() async throws {
+        let generator = PolyhedronismeSwiftGenerator()
+        let clock = ContinuousClock()
+        
+        // Measure time around the generation
+        let start = clock.now
+        let result = try await generator.generate(recipe: "tu3I")
+        let end = clock.now
+        let duration = end - start
+        
+        // Convert Duration to seconds for readable output
+        let components = duration.components
+        let totalSeconds = Double(components.seconds) + (Double(components.attoseconds) / 1_000_000_000_000_000_000.0)
+        let totalMilliseconds = totalSeconds * 1000.0
+        
+        // Validate result was generated
+        XCTAssertFalse(result.vertices.isEmpty)
+        XCTAssertFalse(result.faces.isEmpty)
+        XCTAssertEqual(result.recipe, "tu3I")
+        
+        // Write the timing result to the temp file immediately
+        let tempFilePath = ".cursor/references/temp"
+        let timeString = """
+Recipe tu3I Performance Measurement
+====================================
+Total time: \(duration)
+Time in seconds: \(String(format: "%.6f", totalSeconds))
+Time in milliseconds: \(String(format: "%.3f", totalMilliseconds))
+
+Note: This measurement includes the generation time for recipe "tu3I" (which is executed as "dkdu3I").
+The test validates that vertices and faces were successfully generated.
+
+"""
+        
+        // Use FileHandle for more reliable writing
+        let fileURL = URL(fileURLWithPath: tempFilePath)
+        if let data = timeString.data(using: .utf8) {
+            try? data.write(to: fileURL, options: .atomic)
+        }
+        
+        // Also print it for visibility (this helps with debugging)
+        print("\n=== tu3I Performance ===")
+        print("Total time: \(duration)")
+        print("Time in seconds: \(String(format: "%.6f", totalSeconds))")
+        print("Time in milliseconds: \(String(format: "%.3f", totalMilliseconds))")
+        print("========================\n")
+    }
 }
 

@@ -92,9 +92,9 @@ internal struct MetalKisOperator: ParameterizedPolyhedronOperator {
         computeEncoder.dispatchThreadgroups(threadGroups, threadsPerThreadgroup: threadGroupSize)
         computeEncoder.endEncoding()
         commandBuffer.commit()
-        await commandBuffer.completed()
+        try await commandBuffer.completed()
         
-        // 3. Reconstruct Topology (CPU for now)
+        // 3. Reconstruct Topology (parallelized CPU processing)
         var resultVertices: [Vec3] = []
         resultVertices.reserveCapacity(newVertexCount)
         for i in 0..<newVertexCount {
@@ -102,34 +102,75 @@ internal struct MetalKisOperator: ParameterizedPolyhedronOperator {
             resultVertices.append(Vec3(Double(v.x), Double(v.y), Double(v.z)))
         }
         
-        var finalFaces: [[Int]] = []
         let apexBaseIndex = vertices.count
         
-        // We need to filter out unused apexes to keep the model clean
-        // Or we can just leave them if we don't care about unused vertices (Polyhedronisme usually cleans up?)
-        // Let's do a clean reconstruction.
+        // Pre-calculation: identify which faces need kis and build apex index mapping
+        var kisFaceCount = 0
+        var faceIndexToApexIndex: [Int: Int] = [:]
+        var facesNeedKis: [Bool] = []
+        facesNeedKis.reserveCapacity(polyhedron.faces.count)
         
+        for (i, face) in polyhedron.faces.enumerated() {
+            let needsKis = n == 0 || face.count == n
+            facesNeedKis.append(needsKis)
+            if needsKis {
+                faceIndexToApexIndex[i] = vertices.count + kisFaceCount
+                kisFaceCount += 1
+            }
+        }
+        
+        // Pre-allocate arrays with known sizes
         var finalVertices: [Vec3] = []
-        var vertexMap: [Int: Int] = [:] // Old index -> New index
+        finalVertices.reserveCapacity(vertices.count + kisFaceCount)
         
         // Add original vertices
         finalVertices.append(contentsOf: resultVertices[0..<vertices.count])
-        for i in 0..<vertices.count {
-            vertexMap[i] = i
+        
+        // Add apex vertices (in order)
+        for (i, needsKis) in facesNeedKis.enumerated() {
+            if needsKis {
+                finalVertices.append(resultVertices[apexBaseIndex + i])
+            }
         }
         
-        for (i, face) in polyhedron.faces.enumerated() {
-            if n == 0 || face.count == n {
-                let apexIndex = finalVertices.count
-                finalVertices.append(resultVertices[apexBaseIndex + i])
+        // Parallel processing: build faces in parallel
+        let faceCount = polyhedron.faces.count
+        let faceIndexToApexIndexSnapshot = faceIndexToApexIndex
+        let facesNeedKisSnapshot = facesNeedKis
+        
+        let faceResults = await ParallelExecutor.forEach(count: faceCount) { range in
+            var local: [(Int, [[Int]])] = []
+            local.reserveCapacity(range.count)
+            
+            for idx in range {
+                let face = polyhedron.faces[idx]
+                var newFaces: [[Int]] = []
                 
-                var v1 = face[face.count - 1]
-                for v2 in face {
-                    finalFaces.append([v1, v2, apexIndex])
-                    v1 = v2
+                if facesNeedKisSnapshot[idx] {
+                    if let apexIndex = faceIndexToApexIndexSnapshot[idx] {
+                        var v1 = face[face.count - 1]
+                        for v2 in face {
+                            newFaces.append([v1, v2, apexIndex])
+                            v1 = v2
+                        }
+                    }
+                } else {
+                    newFaces.append(face)
                 }
-            } else {
-                finalFaces.append(face)
+                
+                local.append((idx, newFaces))
+            }
+            
+            return local
+        }
+        
+        // Assemble results in order (ParallelExecutor already returns chunks in order)
+        var finalFaces: [[Int]] = []
+        finalFaces.reserveCapacity(faceCount * 3) // Rough estimate: most kis faces become multiple triangles
+        
+        for chunk in faceResults {
+            for (_, faces) in chunk {
+                finalFaces.append(contentsOf: faces)
             }
         }
         
@@ -153,3 +194,4 @@ struct FaceInfo {
     var start: UInt32
     var count: UInt32
 }
+

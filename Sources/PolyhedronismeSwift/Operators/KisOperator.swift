@@ -31,6 +31,8 @@ internal struct KisOperator: ParameterizedPolyhedronOperator {
     }
     
     public func apply(to polyhedron: PolyhedronModel, parameters: KisParameters) async throws -> PolyhedronModel {
+        let start = CFAbsoluteTimeGetCurrent()
+        print("[KisOperator] 🖥️ CPU implementation starting (faces: \(polyhedron.faces.count), vertices: \(polyhedron.vertices.count))...")
         let n = parameters.n
         let apexdist = parameters.apexDistance
         
@@ -87,6 +89,9 @@ internal struct KisOperator: ParameterizedPolyhedronOperator {
             name: "k\(n == 0 ? "" : "\(n)")\(polyhedron.name)",
             faceClasses: []
         )
+        
+        let duration = CFAbsoluteTimeGetCurrent() - start
+        print("[KisOperator] ✅ CPU implementation completed in \(String(format: "%.3f", duration))s (result: \(resultModel.faces.count) faces, \(resultModel.vertices.count) vertices)")
         
         return resultModel
     }

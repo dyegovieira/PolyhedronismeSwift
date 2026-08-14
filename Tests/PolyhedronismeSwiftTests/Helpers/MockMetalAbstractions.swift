@@ -99,7 +99,7 @@ final class MockMetalCommandBuffer: MetalCommandBuffer, @unchecked Sendable {
         commitCallCount += 1
     }
     
-    func completed() async {
+    func completed() async throws {
         completedCallCount += 1
     }
 }
