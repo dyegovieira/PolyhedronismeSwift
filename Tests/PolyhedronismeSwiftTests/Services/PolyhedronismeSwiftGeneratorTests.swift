@@ -54,6 +54,29 @@ final class PolyhedronismeSwiftGeneratorTests: XCTestCase {
         XCTAssertFalse(result.faces.isEmpty)
         XCTAssertEqual(result.recipe, "dI")
     }
+
+    func testExplicitParallelismConfigurationIsIndependentOfSharedDefaults() async throws {
+        let fixedConfiguration = ParallelismConfiguration(
+            parallelismEnabled: false,
+            maxParallelTasks: 1,
+            minParallelWorkload: 1
+        )
+        let generator = PolyhedronismeSwiftGenerator(parallelismConfiguration: fixedConfiguration)
+        let defaults = PolyhedronismeSwiftConfiguration.shared
+
+        await defaults.setParallelismEnabled(true)
+        await defaults.setMaxParallelTasks(8)
+        await defaults.setMinParallelWorkload(1)
+        let first = try await generator.generate(recipe: "u5I")
+
+        await defaults.setParallelismEnabled(false)
+        await defaults.setMaxParallelTasks(1)
+        await defaults.setMinParallelWorkload(10_000)
+        let second = try await generator.generate(recipe: "u5I")
+
+        XCTAssertEqual(first.vertices, second.vertices)
+        XCTAssertEqual(first.faces, second.faces)
+    }
     
     func testGenerateWithMultipleOperators() async throws {
         let generator = PolyhedronismeSwiftGenerator()
@@ -497,4 +520,3 @@ The test validates that vertices and faces were successfully generated.
         print("========================\n")
     }
 }
-

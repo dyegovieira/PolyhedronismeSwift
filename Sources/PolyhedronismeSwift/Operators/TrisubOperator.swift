@@ -47,10 +47,11 @@ internal struct TrisubOperator: ParameterizedPolyhedronOperator {
         }
         
         let faceCount = polyhedron.faces.count
-        let vertexAssignments = await ParallelExecutor.forEach(count: faceCount) { range in
+        let vertexAssignments = try await ParallelExecutor.forEachCancellable(count: faceCount) { range in
             var local: [(Int, [(String, Vec3)])] = []
             local.reserveCapacity(range.count)
             for fn in range {
+                try Task.checkCancellation()
                 let face = polyhedron.faces[fn]
                 guard face.count >= 3 else { continue }
                 let i1 = face[face.count - 3]
@@ -114,10 +115,11 @@ internal struct TrisubOperator: ParameterizedPolyhedronOperator {
         var faces: [Face] = []
         let vmapSnapshot = vmap
         let uniqmapSnapshot = uniqmap
-        let pendingInstructions = await ParallelExecutor.forEach(count: faceCount) { range in
+        let pendingInstructions = try await ParallelExecutor.forEachCancellable(count: faceCount) { range in
             var local: [(Int, [Face])] = []
             local.reserveCapacity(range.count)
             for fn in range {
+                try Task.checkCancellation()
                 var localFaces: [Face] = []
                 for i in 0..<n {
                     for j in 0...(n - i - 1) {
@@ -169,4 +171,3 @@ internal struct TrisubOperator: ParameterizedPolyhedronOperator {
         )
     }
 }
-

@@ -14,31 +14,15 @@ internal struct MetalKisOperator: ParameterizedPolyhedronOperator {
     
     public let identifier: String = "k"
     
-    private let metalConfig: MetalConfiguration
-    private let pipelineFactory: ComputePipelineFactory
-    private let bufferProvider: MetalBufferProvider
-    
-    init?(metalConfig: MetalConfiguration, pipelineFactory: ComputePipelineFactory) {
-        guard let device = metalConfig.device,
-              let bufferProvider = MetalBufferProvider(device: device) else {
-            return nil
-        }
-        self.metalConfig = metalConfig
-        self.pipelineFactory = pipelineFactory
-        self.bufferProvider = bufferProvider
+    private let executor: MetalExecutor
+
+    init(executor: MetalExecutor) {
+        self.executor = executor
     }
     
     func apply(to polyhedron: PolyhedronModel, parameters: KisParameters) async throws -> PolyhedronModel {
         let n = parameters.n
-        let apexDistance = Float(parameters.apexDistance)
-        
-        // 1. Setup Buffers
-        let vertices = polyhedron.vertices.map { SIMD3<Float>(Float($0.x), Float($0.y), Float($0.z)) }
-        guard let vertexBuffer = bufferProvider.makeBuffer(from: vertices) else {
-            throw MetalError.deviceNotFound
-        }
-        
-        // Flatten faces
+        // Flatten faces for the value-only Metal request.
         var flatIndices: [UInt32] = []
         var faceInfos: [FaceInfo] = []
         for face in polyhedron.faces {
@@ -46,63 +30,16 @@ internal struct MetalKisOperator: ParameterizedPolyhedronOperator {
             flatIndices.append(contentsOf: face.map { UInt32($0) })
         }
         
-        guard let faceInfoBuffer = bufferProvider.makeBuffer(from: faceInfos),
-              let indexBuffer = bufferProvider.makeBuffer(from: flatIndices) else {
-            throw MetalError.deviceNotFound
-        }
-        
-        // Output buffers
-        let newVertexCount = vertices.count + polyhedron.faces.count
-        guard let newVertexBuffer = bufferProvider.makeBuffer(length: newVertexCount * MemoryLayout<SIMD3<Float>>.stride) else {
-            throw MetalError.deviceNotFound
-        }
-        
-        // Copy original vertices
-        let pVertices = newVertexBuffer.contents().bindMemory(to: SIMD3<Float>.self, capacity: newVertexCount)
-        for (i, v) in vertices.enumerated() {
-            pVertices[i] = v
-        }
-        
-        // 2. Compute Apexes
-        let vertexPipeline = try await pipelineFactory.pipeline(for: "kis_vertex_kernel")
-        
-        guard let commandQueue = metalConfig.commandQueue,
-              let commandBuffer = commandQueue.makeCommandBuffer(),
-              let computeEncoder = commandBuffer.makeComputeCommandEncoder() else {
-            throw MetalError.deviceNotFound
-        }
-        
-        var params = KisParams(
-            n: Int32(n),
-            apexDistance: apexDistance,
-            faceCount: UInt32(polyhedron.faces.count),
-            vertexCount: UInt32(vertices.count)
+        let result = try await executor.kis(
+            MetalKisRequest(
+                vertices: polyhedron.vertices,
+                faceInfos: faceInfos,
+                faceIndices: flatIndices,
+                parameters: parameters
+            )
         )
         
-        computeEncoder.setComputePipelineState(vertexPipeline)
-        computeEncoder.setBytes(&params, length: MemoryLayout<KisParams>.stride, index: 0)
-        computeEncoder.setBuffer(vertexBuffer, offset: 0, index: 1)
-        computeEncoder.setBuffer(faceInfoBuffer, offset: 0, index: 2)
-        computeEncoder.setBuffer(indexBuffer, offset: 0, index: 3)
-        computeEncoder.setBuffer(newVertexBuffer, offset: 0, index: 4)
-        
-        let threadGroupSize = MetalSize(width: 32, height: 1, depth: 1)
-        let threadGroups = MetalSize(width: (polyhedron.faces.count + 31) / 32, height: 1, depth: 1)
-        
-        computeEncoder.dispatchThreadgroups(threadGroups, threadsPerThreadgroup: threadGroupSize)
-        computeEncoder.endEncoding()
-        commandBuffer.commit()
-        try await commandBuffer.completed()
-        
-        // 3. Reconstruct Topology (parallelized CPU processing)
-        var resultVertices: [Vec3] = []
-        resultVertices.reserveCapacity(newVertexCount)
-        for i in 0..<newVertexCount {
-            let v = pVertices[i]
-            resultVertices.append(Vec3(Double(v.x), Double(v.y), Double(v.z)))
-        }
-        
-        let apexBaseIndex = vertices.count
+        let apexBaseIndex = polyhedron.vertices.count
         
         // Pre-calculation: identify which faces need kis and build apex index mapping
         var kisFaceCount = 0
@@ -114,22 +51,22 @@ internal struct MetalKisOperator: ParameterizedPolyhedronOperator {
             let needsKis = n == 0 || face.count == n
             facesNeedKis.append(needsKis)
             if needsKis {
-                faceIndexToApexIndex[i] = vertices.count + kisFaceCount
+                faceIndexToApexIndex[i] = polyhedron.vertices.count + kisFaceCount
                 kisFaceCount += 1
             }
         }
         
         // Pre-allocate arrays with known sizes
         var finalVertices: [Vec3] = []
-        finalVertices.reserveCapacity(vertices.count + kisFaceCount)
+        finalVertices.reserveCapacity(polyhedron.vertices.count + kisFaceCount)
         
         // Add original vertices
-        finalVertices.append(contentsOf: resultVertices[0..<vertices.count])
+        finalVertices.append(contentsOf: result.vertices[0..<polyhedron.vertices.count])
         
         // Add apex vertices (in order)
         for (i, needsKis) in facesNeedKis.enumerated() {
             if needsKis {
-                finalVertices.append(resultVertices[apexBaseIndex + i])
+                finalVertices.append(result.vertices[apexBaseIndex + i])
             }
         }
         
@@ -190,8 +127,7 @@ struct KisParams {
     var vertexCount: UInt32
 }
 
-struct FaceInfo {
+struct FaceInfo: Sendable {
     var start: UInt32
     var count: UInt32
 }
-

@@ -6,7 +6,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Metal](https://img.shields.io/badge/Metal-GPU%20Accelerated-red)
 ![Concurrency](https://img.shields.io/badge/Concurrency-Async%2FAwait-blue)
-![Coverage](https://img.shields.io/badge/coverage-94%25-success)
+![Coverage](https://img.shields.io/badge/coverage-91%25-success)
 
 A modern, high-performance Swift implementation of Conway polyhedral operators for constructing and manipulating polyhedra.
 
@@ -188,7 +188,7 @@ The project is built with a clean, modular architecture:
 - **`DefaultNotationParser`**: Parses Conway notation strings into operation ASTs.
 - **`DefaultPolyhedronGenerator`**: Core generation engine that applies operators sequentially.
 - **`DefaultPolyhedronCanonicalizer`**: Handles geometric canonicalization (recentering, rescaling).
-- **`MetalContext`**: Manages GPU resources and compute pipeline state for Metal-accelerated operators.
+- **`MetalExecutor`**: Actor-owned boundary for Metal resources, pipelines, command completion, and value-only GPU results.
 - **`PolyhedronismeSwiftConfiguration`**: Actor-based configuration for parallelism settings.
 
 ## Testing & Code Coverage
@@ -197,27 +197,30 @@ PolyhedronismeSwift maintains comprehensive test coverage with a focus on both u
 
 ### Running Tests
 
-Run all tests using Swift Package Manager:
+Run all tests with Swift 6 strict concurrency checking:
 
 ```bash
-swift test --disable-sandbox
+swift test \
+  -Xswiftc -strict-concurrency=complete \
+  -Xswiftc -warnings-as-errors
 ```
 
-For parallel execution:
+### Running Tests in Xcode
 
-```bash
-swift test --disable-sandbox --parallel
-```
+Open `Packages/Libs/PolyhedronismeSwift` as a standalone Swift package window; do not run the tests from the `SphereBoardGame` host project, which exposes only the library product. Select the `PolyhedronismeSwift` scheme, choose **My Mac**, and use **Product > Test** (`⌘U`).
+
+### Metal Validation
+
+CPU tests are deterministic. Metal execution and CPU/GPU equivalence require a supported Apple device with Metal available; unavailable Metal execution falls back to CPU, while cancellation never does.
 
 ### Code Coverage
 
-The project maintains **94% line coverage** and **89% region coverage** across all source files. To generate code coverage reports:
+Generate coverage with Swift Package Manager:
 
 ```bash
-# Run tests with coverage enabled
-swift test --disable-sandbox --enable-code-coverage --parallel
+swift test --enable-code-coverage
 
-# Generate detailed coverage report
+# Generate a detailed report
 xcrun llvm-cov report .build/*/debug/PolyhedronismeSwiftPackageTests.xctest/Contents/MacOS/PolyhedronismeSwiftPackageTests \
   -instr-profile=.build/*/debug/codecov/default.profdata \
   -ignore-filename-regex='Tests/' \

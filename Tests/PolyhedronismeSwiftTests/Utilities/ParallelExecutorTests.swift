@@ -40,6 +40,23 @@ final class ParallelExecutorTests: XCTestCase {
         let sortedResults = results.sorted()
         XCTAssertEqual(results, sortedResults, "Results should maintain order despite parallel execution")
     }
+
+    func testCancellableExecutionPropagatesCancellation() async throws {
+        let task = Task {
+            try await ParallelExecutor.forEachCancellable(count: 1) { _ in
+                try await Task.sleep(for: .seconds(1))
+                return 1
+            }
+        }
+        task.cancel()
+
+        do {
+            _ = try await task.value
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            // Expected.
+        }
+    }
     
     // MARK: - Sequential Fallback Scenarios
     
@@ -432,7 +449,7 @@ final class ParallelExecutorTests: XCTestCase {
         await config.setMaxParallelTasks(4)
         await config.setMinParallelWorkload(1)
         
-        let results = try await ParallelExecutor.forEach(count: 10, chunkSize: 100) { range in
+        let results = await ParallelExecutor.forEach(count: 10, chunkSize: 100) { range in
             return range.count
         }
         

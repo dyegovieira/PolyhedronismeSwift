@@ -47,10 +47,11 @@ internal struct KisOperator: ParameterizedPolyhedronOperator {
         let centers = await cacheablePolyhedron.cachedCenters(using: faceCalculator)
         
         let faceCount = polyhedron.faces.count
-        let pendingAssignments = await ParallelExecutor.forEach(count: faceCount) { range in
+        let pendingAssignments = try await ParallelExecutor.forEachCancellable(count: faceCount) { range in
             var local: [(Int, KisFaceInstruction)] = []
             local.reserveCapacity(range.count)
             for idx in range {
+                try Task.checkCancellation()
                 local.append((
                     idx,
                     KisFaceInstruction.build(
@@ -131,4 +132,3 @@ private struct KisFaceInstruction {
         return instruction
     }
 }
-

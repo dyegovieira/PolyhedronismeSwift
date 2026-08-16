@@ -56,6 +56,17 @@ final class RecipePresetTests: XCTestCase {
             validatePolyhedron(polyhedron, recipe: preset.notation)
         }
     }
+
+    func testU2ITopologySnapshot() async throws {
+        let generator = try XCTUnwrap(generator)
+        let polyhedron = try await generator.generate(recipe: "u2I")
+
+        XCTAssertEqual(polyhedron.vertices.count, 42)
+        XCTAssertEqual(polyhedron.faces.count, 80)
+        XCTAssertTrue(polyhedron.faces.allSatisfy { $0.count == 3 })
+        let repeated = try await generator.generate(recipe: "u2I")
+        XCTAssertEqual(polyhedron.faces, repeated.faces)
+    }
     
     // MARK: - Validation Helpers
     

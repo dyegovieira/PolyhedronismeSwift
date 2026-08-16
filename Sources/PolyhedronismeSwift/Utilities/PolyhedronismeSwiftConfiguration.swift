@@ -9,12 +9,28 @@
 //
 import Foundation
 
-public actor PolyhedronismeSwiftConfiguration {
-    public struct Snapshot: Sendable {
-        public let parallelismEnabled: Bool
-        public let maxParallelTasks: Int
-        public let minParallelWorkload: Int
+public struct ParallelismConfiguration: Sendable, Equatable {
+    public let parallelismEnabled: Bool
+    public let maxParallelTasks: Int
+    public let minParallelWorkload: Int
+
+    public init(
+        parallelismEnabled: Bool,
+        maxParallelTasks: Int,
+        minParallelWorkload: Int
+    ) {
+        self.parallelismEnabled = parallelismEnabled
+        self.maxParallelTasks = max(1, maxParallelTasks)
+        self.minParallelWorkload = max(1, minParallelWorkload)
     }
+}
+
+enum ParallelismRequestContext {
+    @TaskLocal static var configuration: ParallelismConfiguration?
+}
+
+public actor PolyhedronismeSwiftConfiguration {
+    public typealias Snapshot = ParallelismConfiguration
     
     public static let shared = PolyhedronismeSwiftConfiguration()
     
@@ -38,7 +54,7 @@ public actor PolyhedronismeSwiftConfiguration {
     }
     
     public func snapshot() -> Snapshot {
-        Snapshot(
+        ParallelismConfiguration(
             parallelismEnabled: _parallelismEnabled,
             maxParallelTasks: _maxParallelTasks,
             minParallelWorkload: _minParallelWorkload
@@ -63,4 +79,3 @@ public actor PolyhedronismeSwiftConfiguration {
         _minParallelWorkload = 256
     }
 }
-

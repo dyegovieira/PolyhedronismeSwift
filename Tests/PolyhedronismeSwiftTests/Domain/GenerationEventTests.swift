@@ -98,7 +98,13 @@ final class GenerationEventTests: XCTestCase {
     }
     
     func testGenerationEventCompleted() async throws {
-        let cube = try await Polyhedron.cube()
+        let cubeModel = try await CubeGenerator().generate()
+        let cube = Polyhedron(
+            vertices: cubeModel.vertices,
+            faces: cubeModel.faces,
+            name: cubeModel.name,
+            faceClasses: cubeModel.faceClasses
+        )
         let event = GenerationEvent.completed(cube)
         
         if case .completed(let p) = event {
@@ -109,4 +115,3 @@ final class GenerationEventTests: XCTestCase {
         }
     }
 }
-

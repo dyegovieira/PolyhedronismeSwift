@@ -9,22 +9,20 @@
 //
 import Foundation
 
-public struct PolyhedronismeSwiftGenerator: PolyhedronismeSwiftProtocol {
+public struct PolyhedronismeSwiftGenerator: PolyhedronismeSwiftProtocol, Sendable {
     private let generator: PolyhedronGeneratorProtocol
+    private let parallelismConfiguration: ParallelismConfiguration?
     
-    public init() {
+    public init(parallelismConfiguration: ParallelismConfiguration? = nil) {
         let baseRegistry = StandardBaseRegistry.makeDefault()
         let operatorRegistry = StandardOperatorRegistry.makeDefault()
         
-        // Initialize Metal infrastructure
-        let metalConfig = MetalContext()
-        let pipelineFactory = ComputePipelineFactory(metalConfig: metalConfig)
+        let metalExecutor = MetalExecutor()
         
         // Initialize factory with dependencies
         let operatorFactory = DefaultOperatorFactory(
             operatorRegistry: operatorRegistry,
-            metalConfig: metalConfig,
-            pipelineFactory: pipelineFactory
+            metalExecutor: metalExecutor
         )
         
         self.generator = DefaultPolyhedronGenerator(
@@ -32,10 +30,18 @@ public struct PolyhedronismeSwiftGenerator: PolyhedronismeSwiftProtocol {
             operatorRegistry: operatorRegistry,
             operatorFactory: operatorFactory
         )
+        self.parallelismConfiguration = parallelismConfiguration
     }
     
     public func generate(recipe: String) async throws -> Polyhedron {
-        let model = try await generator.generate(notation: recipe)
+        let model: PolyhedronModel
+        if let parallelismConfiguration {
+            model = try await ParallelismRequestContext.$configuration.withValue(parallelismConfiguration) {
+                try await generator.generate(notation: recipe)
+            }
+        } else {
+            model = try await generator.generate(notation: recipe)
+        }
         return Polyhedron(
             vertices: model.vertices,
             faces: model.faces,
@@ -46,7 +52,11 @@ public struct PolyhedronismeSwiftGenerator: PolyhedronismeSwiftProtocol {
     }
     
     public func stream(recipe: String) -> AsyncThrowingStream<GenerationEvent, Error> {
-        generator.stream(notation: recipe)
+        if let parallelismConfiguration {
+            return ParallelismRequestContext.$configuration.withValue(parallelismConfiguration) {
+                generator.stream(notation: recipe)
+            }
+        }
+        return generator.stream(notation: recipe)
     }
 }
-

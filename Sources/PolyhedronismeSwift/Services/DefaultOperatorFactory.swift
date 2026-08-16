@@ -11,17 +11,14 @@ import Foundation
 
 internal struct DefaultOperatorFactory: OperatorFactory {
     private let operatorRegistry: OperatorRegistry
-    private let metalConfig: MetalConfiguration
-    private let pipelineFactory: ComputePipelineFactory
+    private let metalExecutor: MetalExecutor
     
     internal init(
         operatorRegistry: OperatorRegistry,
-        metalConfig: MetalConfiguration,
-        pipelineFactory: ComputePipelineFactory
+        metalExecutor: MetalExecutor? = nil
     ) {
         self.operatorRegistry = operatorRegistry
-        self.metalConfig = metalConfig
-        self.pipelineFactory = pipelineFactory
+        self.metalExecutor = metalExecutor ?? MetalExecutor()
     }
     
     func createOperator(for operation: OperatorOperation) async throws -> any PolyhedronOperatorApplicable {
@@ -60,41 +57,37 @@ internal struct DefaultOperatorFactory: OperatorFactory {
         let params = KisParameters(n: n, apexDistance: apexDist)
         let cpuKis = KisOperator()
         
-        // Always use Metal with CPU fallback (better behavior)
-        if let metalKis = MetalKisOperator(metalConfig: metalConfig, pipelineFactory: pipelineFactory) {
-            let fallback = MetalFallbackParameterizedOperator(metalOperator: metalKis, cpuFallback: cpuKis, parameters: params)
-            return AnyOperatorApplicable(fallback)
-        } else {
-            return AnyOperatorApplicable(cpuKis, parameters: params)
-        }
+        let metalKis = MetalKisOperator(executor: metalExecutor)
+        let fallback = MetalFallbackParameterizedOperator(
+            metalOperator: metalKis,
+            cpuFallback: cpuKis,
+            parameters: params
+        )
+        return AnyOperatorApplicable(fallback)
     }
     
     private func createReflectOperator() async throws -> any PolyhedronOperatorApplicable {
         let cpuReflect = ReflectOperator()
         
-        if let metalReflect = MetalReflectOperator(metalConfig: metalConfig, pipelineFactory: pipelineFactory) {
-            let fallback = MetalFallbackOperator(metalOperator: metalReflect, cpuFallback: cpuReflect)
-            return AnyOperatorApplicable(fallback)
-        } else {
-            return AnyOperatorApplicable(cpuReflect)
-        }
+        let metalReflect = MetalReflectOperator(executor: metalExecutor)
+        let fallback = MetalFallbackOperator(metalOperator: metalReflect, cpuFallback: cpuReflect)
+        return AnyOperatorApplicable(fallback)
     }
     
     private func createDualOperator() async throws -> any PolyhedronOperatorApplicable {
-        // Always use CPU only (better behavior for Dual)
         let cpuDual = DualOperator()
-        return AnyOperatorApplicable(cpuDual)
+        let metalDual = MetalDualOperator(executor: metalExecutor)
+        return AnyOperatorApplicable(
+            MetalFallbackOperator(metalOperator: metalDual, cpuFallback: cpuDual)
+        )
     }
     
     private func createAmboOperator() async throws -> any PolyhedronOperatorApplicable {
         let cpuAmbo = AmboOperator()
-        
-        if let metalAmbo = MetalAmboOperator(metalConfig: metalConfig, pipelineFactory: pipelineFactory) {
-            let fallback = MetalFallbackOperator(metalOperator: metalAmbo, cpuFallback: cpuAmbo)
-            return AnyOperatorApplicable(fallback)
-        } else {
-            return AnyOperatorApplicable(cpuAmbo)
-        }
+
+        let metalAmbo = MetalAmboOperator(executor: metalExecutor)
+        let fallback = MetalFallbackOperator(metalOperator: metalAmbo, cpuFallback: cpuAmbo)
+        return AnyOperatorApplicable(fallback)
     }
     
     private func createTrisubOperator(parameters: [SendableParameter]) async throws -> any PolyhedronOperatorApplicable {
@@ -118,4 +111,3 @@ internal struct DefaultOperatorFactory: OperatorFactory {
         return AnyOperatorApplicable(op)
     }
 }
-

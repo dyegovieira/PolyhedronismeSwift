@@ -32,6 +32,6 @@ let package = Package(
             name: "PolyhedronismeSwiftTests",
             dependencies: ["PolyhedronismeSwift"]
         ),
-    ]
+    ],
+    swiftLanguageModes: [.v6]
 )
-

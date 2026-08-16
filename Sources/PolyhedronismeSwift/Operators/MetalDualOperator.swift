@@ -11,73 +11,19 @@ import Foundation
 
 internal struct MetalDualOperator: PolyhedronOperator {
     public let identifier: String = "d"
-    
-    private let metalConfig: MetalConfiguration
-    private let pipelineFactory: ComputePipelineFactory
-    private let bufferProvider: MetalBufferProvider
-    
-    init?(metalConfig: MetalConfiguration, pipelineFactory: ComputePipelineFactory) {
-        guard let device = metalConfig.device,
-              let bufferProvider = MetalBufferProvider(device: device) else {
-            return nil
-        }
-        self.metalConfig = metalConfig
-        self.pipelineFactory = pipelineFactory
-        self.bufferProvider = bufferProvider
+
+    private let executor: MetalExecutor
+
+    init(executor: MetalExecutor) {
+        self.executor = executor
     }
-    
+
     func apply(to polyhedron: PolyhedronModel) async throws -> PolyhedronModel {
-        // 1. Compute Face Centroids (New Vertices) on GPU
-        let vertices = polyhedron.vertices.map { SIMD3<Float>(Float($0.x), Float($0.y), Float($0.z)) }
-        
-        // Flatten faces for GPU
-        var flatIndices: [UInt32] = []
-        var faceInfos: [FaceInfo] = []
-        for face in polyhedron.faces {
-            faceInfos.append(FaceInfo(start: UInt32(flatIndices.count), count: UInt32(face.count)))
-            flatIndices.append(contentsOf: face.map { UInt32($0) })
-        }
-        
-        guard let vertexBuffer = bufferProvider.makeBuffer(from: vertices),
-              let faceInfoBuffer = bufferProvider.makeBuffer(from: faceInfos),
-              let indexBuffer = bufferProvider.makeBuffer(from: flatIndices),
-              let centroidBuffer = bufferProvider.makeBuffer(length: polyhedron.faces.count * MemoryLayout<SIMD3<Float>>.stride) else {
-            throw MetalError.deviceNotFound
-        }
-        
-        let pipeline = try await pipelineFactory.pipeline(for: "face_centroid_kernel")
-        
-        guard let commandQueue = metalConfig.commandQueue,
-              let commandBuffer = commandQueue.makeCommandBuffer(),
-              let computeEncoder = commandBuffer.makeComputeCommandEncoder() else {
-            throw MetalError.deviceNotFound
-        }
-        
-        var faceCount = UInt32(polyhedron.faces.count)
-        
-        computeEncoder.setComputePipelineState(pipeline)
-        computeEncoder.setBuffer(vertexBuffer, offset: 0, index: 0)
-        computeEncoder.setBuffer(faceInfoBuffer, offset: 0, index: 1)
-        computeEncoder.setBuffer(indexBuffer, offset: 0, index: 2)
-        computeEncoder.setBuffer(centroidBuffer, offset: 0, index: 3)
-        computeEncoder.setBytes(&faceCount, length: MemoryLayout<UInt32>.stride, index: 4)
-        
-        let threadGroupSize = MetalSize(width: 64, height: 1, depth: 1)
-        let threadGroups = MetalSize(width: (polyhedron.faces.count + 63) / 64, height: 1, depth: 1)
-        
-        computeEncoder.dispatchThreadgroups(threadGroups, threadsPerThreadgroup: threadGroupSize)
-        computeEncoder.endEncoding()
-        commandBuffer.commit()
-        try await commandBuffer.completed()
-        
-        // 2. Read back centroids
-        let pCentroids = centroidBuffer.contents().bindMemory(to: SIMD3<Float>.self, capacity: polyhedron.faces.count)
-        var newVertices: [Vec3] = []
-        newVertices.reserveCapacity(polyhedron.faces.count)
-        for i in 0..<polyhedron.faces.count {
-            let v = pCentroids[i]
-            newVertices.append(Vec3(Double(v.x), Double(v.y), Double(v.z)))
-        }
+        // 1. Compute face centroids on Metal, returning only owned values.
+        let result = try await executor.dual(
+            MetalDualRequest(vertices: polyhedron.vertices, faces: polyhedron.faces)
+        )
+        let newVertices = result.vertices
         
         // 3. Construct Faces on CPU
         // Build Directed Edge Map: (u, v) -> FaceIndex

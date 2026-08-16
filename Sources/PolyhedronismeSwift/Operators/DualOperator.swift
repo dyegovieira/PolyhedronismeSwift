@@ -33,10 +33,11 @@ internal struct DualOperator: PolyhedronOperator {
         let chunkBase = max(1, configuration.maxParallelTasks * 2)
         let dualChunkSize = max(configuration.minParallelWorkload, max(1, faceCount / chunkBase))
         if faceCount > 0 {
-            let mapAssignments = await ParallelExecutor.forEach(count: faceCount, chunkSize: dualChunkSize) { range in
+            let mapAssignments = try await ParallelExecutor.forEachCancellable(count: faceCount, chunkSize: dualChunkSize) { range in
                 var local: [(Int, [(Int, Int, Int)])] = []
                 local.reserveCapacity(range.count)
                 for idx in range {
+                    try Task.checkCancellation()
                     var entries: [(Int, Int, Int)] = []
                     let face = polyhedron.faces[idx]
                     guard !face.isEmpty else { continue }
@@ -68,10 +69,11 @@ internal struct DualOperator: PolyhedronOperator {
         }
         
         let faceMapSnapshot = faceMap
-        let pendingInstructions = await ParallelExecutor.forEach(count: faceCount, chunkSize: dualChunkSize) { range in
+        let pendingInstructions = try await ParallelExecutor.forEachCancellable(count: faceCount, chunkSize: dualChunkSize) { range in
             var local: [DualFlagInstruction] = []
             local.reserveCapacity(range.count)
             for idx in range {
+                try Task.checkCancellation()
                 local.append(
                     DualFlagInstruction.build(
                         faceIndex: idx,
@@ -201,4 +203,3 @@ private func parseVertexIndex(from faceName: String) -> Int? {
     }
     return Int(faceName.dropFirst())
 }
-

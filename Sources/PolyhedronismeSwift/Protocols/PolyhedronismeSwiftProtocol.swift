@@ -9,8 +9,7 @@
 //
 import Foundation
 
-public protocol PolyhedronismeSwiftProtocol {
+public protocol PolyhedronismeSwiftProtocol: Sendable {
     func generate(recipe: String) async throws -> Polyhedron
     func stream(recipe: String) -> AsyncThrowingStream<GenerationEvent, Error>
 }
-

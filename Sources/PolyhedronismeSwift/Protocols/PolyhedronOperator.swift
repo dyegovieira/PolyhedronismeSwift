@@ -15,8 +15,7 @@ internal protocol PolyhedronOperator: Sendable {
 }
 
 internal protocol ParameterizedPolyhedronOperator: Sendable {
-    associatedtype Parameters
+    associatedtype Parameters: Sendable
     var identifier: String { get }
     func apply(to polyhedron: PolyhedronModel, parameters: Parameters) async throws -> PolyhedronModel
 }
-

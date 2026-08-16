@@ -6,12 +6,9 @@ final class DefaultPolyhedronGeneratorTests: XCTestCase {
         let baseRegistry = StandardBaseRegistry.makeDefault()
         let operatorRegistry = StandardOperatorRegistry.makeDefault()
         
-        let metalConfig = MetalContext()
-        let pipelineFactory = ComputePipelineFactory(metalConfig: metalConfig)
         let operatorFactory = DefaultOperatorFactory(
             operatorRegistry: operatorRegistry,
-            metalConfig: metalConfig,
-            pipelineFactory: pipelineFactory
+            metalExecutor: MetalExecutor(capabilities: .unavailable)
         )
         
         return DefaultPolyhedronGenerator(
@@ -84,4 +81,3 @@ final class DefaultPolyhedronGeneratorTests: XCTestCase {
         }
     }
 }
-

@@ -15,8 +15,7 @@ internal protocol BasePolyhedronGenerator: Sendable {
 }
 
 internal protocol ParameterizedBasePolyhedronGenerator: Sendable {
-    associatedtype Parameters
+    associatedtype Parameters: Sendable
     var identifier: String { get }
     func generate(parameters: Parameters) async throws -> PolyhedronModel
 }
-

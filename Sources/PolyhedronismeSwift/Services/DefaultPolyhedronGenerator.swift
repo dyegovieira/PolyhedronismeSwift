@@ -34,44 +34,72 @@ internal struct DefaultPolyhedronGenerator: PolyhedronGeneratorProtocol {
     }
     
     public func generate(notation: String) async throws -> PolyhedronModel {
-        try await Task.detached(priority: .userInitiated) {
-            try await self.generateAsync(notation: notation)
-        }.value
+        let configuration = if let requestConfiguration = ParallelismRequestContext.configuration {
+            requestConfiguration
+        } else {
+            await PolyhedronismeSwiftConfiguration.shared.snapshot()
+        }
+        return try await ParallelismRequestContext.$configuration.withValue(configuration) {
+            try await generateAsync(notation: notation)
+        }
     }
     
     public func stream(notation: String) -> AsyncThrowingStream<GenerationEvent, Error> {
         AsyncThrowingStream { continuation in
-            Task(priority: .userInitiated) {
+            let producer = Task(priority: .userInitiated) {
                 do {
-                    let model = try await self.generateAsync(
-                        notation: notation,
-                        eventHandler: { continuation.yield($0) }
-                    )
+                    let configuration = if let requestConfiguration = ParallelismRequestContext.configuration {
+                        requestConfiguration
+                    } else {
+                        await PolyhedronismeSwiftConfiguration.shared.snapshot()
+                    }
+                    let model = try await ParallelismRequestContext.$configuration.withValue(configuration) {
+                        try await self.generateAsync(notation: notation, eventHandler: { event in
+                            switch continuation.yield(event) {
+                            case .terminated:
+                                return false
+                            case .enqueued, .dropped:
+                                return true
+                            @unknown default:
+                                return false
+                            }
+                        })
+                    }
+                    try Task.checkCancellation()
                     let polyhedron = Polyhedron(model, recipe: notation)
-                    continuation.yield(.completed(polyhedron))
-                    continuation.finish()
+                    guard case .terminated = continuation.yield(.completed(polyhedron)) else {
+                        continuation.finish()
+                        return
+                    }
                 } catch {
                     continuation.finish(throwing: error)
                 }
+            }
+            continuation.onTermination = { @Sendable _ in
+                producer.cancel()
             }
         }
     }
     
     private func generateAsync(
         notation: String,
-        eventHandler: ((GenerationEvent) -> Void)? = nil
+        eventHandler: ((GenerationEvent) -> Bool)? = nil
     ) async throws -> PolyhedronModel {
-        eventHandler?(.stageStarted(.parsing))
+        try Task.checkCancellation()
+        try emit(.stageStarted(.parsing), to: eventHandler)
         let ast = try parser.parse(notation)
-        eventHandler?(.stageCompleted(.parsing))
+        try Task.checkCancellation()
+        try emit(.stageCompleted(.parsing), to: eventHandler)
         let firstOp = ast.base
         
         var polyModel: PolyhedronModel
         
-        eventHandler?(.stageStarted(.base(firstOp.identifier)))
+        try emit(.stageStarted(.base(firstOp.identifier)), to: eventHandler)
         if let base = baseRegistry.getBase(for: firstOp.identifier) {
             do {
                 polyModel = try await base.generate()
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
                 throw GenerationError.baseGenerationFailed(firstOp.identifier, underlying: error)
             }
@@ -86,18 +114,24 @@ internal struct DefaultPolyhedronGenerator: PolyhedronGeneratorProtocol {
             if let prismGen = baseRegistry.getParameterizedBase(for: firstOp.identifier, as: PrismParameters.self) as? PrismGenerator {
                 do {
                     polyModel = try await prismGen.generate(parameters: PrismParameters(n: n))
+                } catch is CancellationError {
+                    throw CancellationError()
                 } catch {
                     throw GenerationError.baseGenerationFailed(firstOp.identifier, underlying: error)
                 }
             } else if let antiprismGen = baseRegistry.getParameterizedBase(for: firstOp.identifier, as: AntiprismParameters.self) as? AntiprismGenerator {
                 do {
                     polyModel = try await antiprismGen.generate(parameters: AntiprismParameters(n: n))
+                } catch is CancellationError {
+                    throw CancellationError()
                 } catch {
                     throw GenerationError.baseGenerationFailed(firstOp.identifier, underlying: error)
                 }
             } else if let pyramidGen = baseRegistry.getParameterizedBase(for: firstOp.identifier, as: PyramidParameters.self) as? PyramidGenerator {
                 do {
                     polyModel = try await pyramidGen.generate(parameters: PyramidParameters(n: n))
+                } catch is CancellationError {
+                    throw CancellationError()
                 } catch {
                     throw GenerationError.baseGenerationFailed(firstOp.identifier, underlying: error)
                 }
@@ -115,12 +149,16 @@ internal struct DefaultPolyhedronGenerator: PolyhedronGeneratorProtocol {
             if let cupolaGen = baseRegistry.getParameterizedBase(for: firstOp.identifier, as: CupolaParameters.self) as? CupolaGenerator {
                 do {
                     polyModel = try await cupolaGen.generate(parameters: CupolaParameters(n: n, alpha: nil, height: nil))
+                } catch is CancellationError {
+                    throw CancellationError()
                 } catch {
                     throw GenerationError.baseGenerationFailed(firstOp.identifier, underlying: error)
                 }
             } else if let anticupolaGen = baseRegistry.getParameterizedBase(for: firstOp.identifier, as: AnticupolaParameters.self) as? AnticupolaGenerator {
                 do {
                     polyModel = try await anticupolaGen.generate(parameters: AnticupolaParameters(n: n, alpha: nil, height: nil))
+                } catch is CancellationError {
+                    throw CancellationError()
                 } catch {
                     throw GenerationError.baseGenerationFailed(firstOp.identifier, underlying: error)
                 }
@@ -130,29 +168,43 @@ internal struct DefaultPolyhedronGenerator: PolyhedronGeneratorProtocol {
         } else {
             throw GenerationError.parsingFailed(.unknownBase(firstOp.identifier))
         }
-        eventHandler?(.stageCompleted(.base(firstOp.identifier)))
-        eventHandler?(.metrics(PolyhedronMetricsSnapshot(model: polyModel, stageDescription: "Base \(firstOp.identifier)")))
+        try Task.checkCancellation()
+        try emit(.stageCompleted(.base(firstOp.identifier)), to: eventHandler)
+        try emit(.metrics(PolyhedronMetricsSnapshot(model: polyModel, stageDescription: "Base \(firstOp.identifier)")), to: eventHandler)
         
         for op in ast.operators {
-            eventHandler?(.stageStarted(.operator(op.identifier)))
+            try Task.checkCancellation()
+            try emit(.stageStarted(.operator(op.identifier)), to: eventHandler)
             do {
                 let operatorApplicable = try await operatorFactory.createOperator(for: op)
                 polyModel = try await operatorApplicable.apply(to: polyModel)
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
                 throw GenerationError.operatorApplicationFailed(op.identifier, underlying: error)
             }
-            eventHandler?(.stageCompleted(.operator(op.identifier)))
-            eventHandler?(.metrics(PolyhedronMetricsSnapshot(model: polyModel, stageDescription: "Operator \(op.identifier)")))
+            try Task.checkCancellation()
+            try emit(.stageCompleted(.operator(op.identifier)), to: eventHandler)
+            try emit(.metrics(PolyhedronMetricsSnapshot(model: polyModel, stageDescription: "Operator \(op.identifier)")), to: eventHandler)
         }
         
-        eventHandler?(.stageStarted(.canonicalize))
+        try emit(.stageStarted(.canonicalize), to: eventHandler)
         var workingModel = polyModel
         workingModel = await operations.recenter(workingModel, edgeCalculator: edgeCalculator)
         workingModel = operations.rescale(workingModel)
-        eventHandler?(.stageCompleted(.canonicalize))
-        eventHandler?(.metrics(PolyhedronMetricsSnapshot(model: workingModel, stageDescription: "Canonicalize")))
+        try Task.checkCancellation()
+        try emit(.stageCompleted(.canonicalize), to: eventHandler)
+        try emit(.metrics(PolyhedronMetricsSnapshot(model: workingModel, stageDescription: "Canonicalize")), to: eventHandler)
         
         return workingModel
     }
-}
 
+    private func emit(
+        _ event: GenerationEvent,
+        to eventHandler: ((GenerationEvent) -> Bool)?
+    ) throws {
+        guard eventHandler?(event) ?? true else {
+            throw CancellationError()
+        }
+    }
+}

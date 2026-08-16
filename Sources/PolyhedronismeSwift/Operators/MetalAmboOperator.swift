@@ -11,19 +11,11 @@ import Foundation
 
 internal struct MetalAmboOperator: PolyhedronOperator {
     public let identifier: String = "a"
-    
-    private let metalConfig: MetalConfiguration
-    private let pipelineFactory: ComputePipelineFactory
-    private let bufferProvider: MetalBufferProvider
-    
-    init?(metalConfig: MetalConfiguration, pipelineFactory: ComputePipelineFactory) {
-        guard let device = metalConfig.device,
-              let bufferProvider = MetalBufferProvider(device: device) else {
-            return nil
-        }
-        self.metalConfig = metalConfig
-        self.pipelineFactory = pipelineFactory
-        self.bufferProvider = bufferProvider
+
+    private let executor: MetalExecutor
+
+    init(executor: MetalExecutor) {
+        self.executor = executor
     }
     
     func apply(to polyhedron: PolyhedronModel) async throws -> PolyhedronModel {
@@ -33,47 +25,9 @@ internal struct MetalAmboOperator: PolyhedronOperator {
         
         guard edgeCount > 0 else { return polyhedron }
         
-        // 2. Compute New Vertices (Midpoints) on GPU
-        let vertices = polyhedron.vertices.map { SIMD3<Float>(Float($0.x), Float($0.y), Float($0.z)) }
-        
-        guard let vertexBuffer = bufferProvider.makeBuffer(from: vertices),
-              let edgeBuffer = bufferProvider.makeBuffer(from: edges),
-              let newVertexBuffer = bufferProvider.makeBuffer(length: edgeCount * MemoryLayout<SIMD3<Float>>.stride) else {
-            throw MetalError.deviceNotFound
-        }
-        
-        let pipeline = try await pipelineFactory.pipeline(for: "ambo_vertex_kernel")
-        
-        guard let commandQueue = metalConfig.commandQueue,
-              let commandBuffer = commandQueue.makeCommandBuffer(),
-              let computeEncoder = commandBuffer.makeComputeCommandEncoder() else {
-            throw MetalError.deviceNotFound
-        }
-        
-        var params = AmboParams(edgeCount: UInt32(edgeCount), vertexCount: UInt32(vertices.count))
-        
-        computeEncoder.setComputePipelineState(pipeline)
-        computeEncoder.setBytes(&params, length: MemoryLayout<AmboParams>.stride, index: 0)
-        computeEncoder.setBuffer(vertexBuffer, offset: 0, index: 1)
-        computeEncoder.setBuffer(edgeBuffer, offset: 0, index: 2)
-        computeEncoder.setBuffer(newVertexBuffer, offset: 0, index: 3)
-        
-        let threadGroupSize = MetalSize(width: 64, height: 1, depth: 1)
-        let threadGroups = MetalSize(width: (edgeCount + 63) / 64, height: 1, depth: 1)
-        
-        computeEncoder.dispatchThreadgroups(threadGroups, threadsPerThreadgroup: threadGroupSize)
-        computeEncoder.endEncoding()
-        commandBuffer.commit()
-        try await commandBuffer.completed()
-        
-        // 3. Read back vertices
-        let pVertices = newVertexBuffer.contents().bindMemory(to: SIMD3<Float>.self, capacity: edgeCount)
-        var resultVertices: [Vec3] = []
-        resultVertices.reserveCapacity(edgeCount)
-        for i in 0..<edgeCount {
-            let v = pVertices[i]
-            resultVertices.append(Vec3(Double(v.x), Double(v.y), Double(v.z)))
-        }
+        let result = try await executor.ambo(
+            MetalAmboRequest(vertices: polyhedron.vertices, edges: edges)
+        )
         
         // 4. Construct Faces on CPU
         var newFaces: [[Int]] = []
@@ -170,7 +124,7 @@ internal struct MetalAmboOperator: PolyhedronOperator {
         }
         
         return PolyhedronModel(
-            vertices: resultVertices,
+            vertices: result.vertices,
             faces: newFaces,
             name: "a\(polyhedron.name)",
             faceClasses: []
@@ -201,7 +155,7 @@ struct AmboParams {
     var vertexCount: UInt32
 }
 
-struct MetalAmboEdge {
+struct MetalAmboEdge: Sendable {
     var v1: UInt32
     var v2: UInt32
 }

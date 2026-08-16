@@ -22,6 +22,8 @@ internal struct MetalFallbackOperator<MetalOp: PolyhedronOperator, CPUOp: Polyhe
     func apply(to polyhedron: PolyhedronModel) async throws -> PolyhedronModel {
         do {
             return try await metalOperator.apply(to: polyhedron)
+        } catch is CancellationError {
+            throw CancellationError()
         } catch is MetalError {
             // Fall back to CPU on any Metal error
             return try await cpuFallback.apply(to: polyhedron)
@@ -42,26 +44,12 @@ internal struct MetalFallbackParameterizedOperator<MetalOp: ParameterizedPolyhed
     }
     
     func apply(to polyhedron: PolyhedronModel) async throws -> PolyhedronModel {
-        let start = CFAbsoluteTimeGetCurrent()
         do {
-            print("[MetalFallback] 🔵 Attempting Metal implementation for operator k (faces: \(polyhedron.faces.count), vertices: \(polyhedron.vertices.count))...")
-            let result = try await metalOperator.apply(to: polyhedron, parameters: parameters)
-            let duration = CFAbsoluteTimeGetCurrent() - start
-            print("[MetalFallback] ✅ Metal implementation completed in \(String(format: "%.3f", duration))s")
-            return result
-        } catch let error as MetalError {
-            let duration = CFAbsoluteTimeGetCurrent() - start
-            print("[MetalFallback] ⚠️ Metal failed after \(String(format: "%.3f", duration))s: \(error)")
-            print("[MetalFallback] 🔄 Falling back to CPU...")
-            let cpuStart = CFAbsoluteTimeGetCurrent()
-            let result = try await cpuFallback.apply(to: polyhedron, parameters: parameters)
-            let cpuDuration = CFAbsoluteTimeGetCurrent() - cpuStart
-            print("[MetalFallback] ✅ CPU fallback completed in \(String(format: "%.3f", cpuDuration))s")
-            return result
-        } catch {
-            print("[MetalFallback] ❌ Unexpected error: \(error)")
-            throw error
+            return try await metalOperator.apply(to: polyhedron, parameters: parameters)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch is MetalError {
+            return try await cpuFallback.apply(to: polyhedron, parameters: parameters)
         }
     }
 }
-

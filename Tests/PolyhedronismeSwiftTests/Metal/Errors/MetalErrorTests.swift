@@ -45,5 +45,12 @@ final class MetalErrorTests: XCTestCase {
         let localizedError: LocalizedError = error
         XCTAssertNotNil(localizedError.errorDescription)
     }
-}
 
+    func testTypedExecutionErrorsAreDescriptive() {
+        XCTAssertEqual(MetalError.unavailable(capability: "compute").errorDescription, "Metal capability unavailable: compute")
+        XCTAssertEqual(MetalError.resourceCreation("vertex buffer").errorDescription, "Metal resource creation failed: vertex buffer")
+        XCTAssertEqual(MetalError.pipelineCreation("kis").errorDescription, "Metal pipeline creation failed: kis")
+        XCTAssertEqual(MetalError.commandFailure("device lost").errorDescription, "Metal command failed: device lost")
+        XCTAssertEqual(MetalError.timeout.errorDescription, "Metal command timed out")
+    }
+}

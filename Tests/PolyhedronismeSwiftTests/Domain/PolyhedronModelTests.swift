@@ -71,11 +71,13 @@ final class PolyhedronModelTests: XCTestCase {
         
         _ = await model.cachedEdges(using: calculator)
         _ = await model.cachedEdges(using: calculator)
-        XCTAssertEqual(calculator.calculateEdgesCallCount, 1)
+        let firstEdgeCallCount = await calculator.calculateEdgesCallCount
+        XCTAssertEqual(firstEdgeCallCount, 1)
         
         model.vertices.append([0, 0, 1])
         _ = await model.cachedEdges(using: calculator)
-        XCTAssertEqual(calculator.calculateEdgesCallCount, 2)
+        let secondEdgeCallCount = await calculator.calculateEdgesCallCount
+        XCTAssertEqual(secondEdgeCallCount, 2)
     }
     
     func testCentersCacheInvalidatesOnFaceMutation() async {
@@ -90,12 +92,14 @@ final class PolyhedronModelTests: XCTestCase {
         
         _ = await model.cachedCenters(using: calculator)
         _ = await model.cachedCenters(using: calculator)
-        XCTAssertEqual(calculator.calculateCentersCallCount, 1)
+        let firstCenterCallCount = await calculator.calculateCentersCallCount
+        XCTAssertEqual(firstCenterCallCount, 1)
         
         // Test didSet observer with direct assignment
         model.faces = [[0, 1, 2], [0, 2, 1]]
         _ = await model.cachedCenters(using: calculator)
-        XCTAssertEqual(calculator.calculateCentersCallCount, 2)
+        let secondCenterCallCount = await calculator.calculateCentersCallCount
+        XCTAssertEqual(secondCenterCallCount, 2)
     }
     
     func testCentersCacheInvalidatesOnFaceDirectAssignment() async {
@@ -109,12 +113,14 @@ final class PolyhedronModelTests: XCTestCase {
         )
         
         _ = await model.cachedCenters(using: calculator)
-        XCTAssertEqual(calculator.calculateCentersCallCount, 1)
+        let initialCenterCallCount = await calculator.calculateCentersCallCount
+        XCTAssertEqual(initialCenterCallCount, 1)
         
         // Direct assignment should trigger didSet
         model.faces = [[0, 1, 2], [1, 2, 0]]
         _ = await model.cachedCenters(using: calculator)
-        XCTAssertEqual(calculator.calculateCentersCallCount, 2)
+        let invalidatedCenterCallCount = await calculator.calculateCentersCallCount
+        XCTAssertEqual(invalidatedCenterCallCount, 2)
     }
     
     func testEdgesCacheInvalidatesOnVerticesDirectAssignment() async {
@@ -125,12 +131,14 @@ final class PolyhedronModelTests: XCTestCase {
         let calculator = SpyEdgeCalculator(edgesToReturn: [[0, 1], [1, 2], [2, 0]])
         
         _ = await model.cachedEdges(using: calculator)
-        XCTAssertEqual(calculator.calculateEdgesCallCount, 1)
+        let initialEdgeCallCount = await calculator.calculateEdgesCallCount
+        XCTAssertEqual(initialEdgeCallCount, 1)
         
         // Direct assignment should trigger didSet
         model.vertices = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]
         _ = await model.cachedEdges(using: calculator)
-        XCTAssertEqual(calculator.calculateEdgesCallCount, 2)
+        let invalidatedEdgeCallCount = await calculator.calculateEdgesCallCount
+        XCTAssertEqual(invalidatedEdgeCallCount, 2)
     }
     
     func testNormalsCacheInvalidatesOnVertexMutation() async {
@@ -145,11 +153,13 @@ final class PolyhedronModelTests: XCTestCase {
         
         _ = await model.cachedNormals(using: calculator)
         _ = await model.cachedNormals(using: calculator)
-        XCTAssertEqual(calculator.calculateNormalsCallCount, 1)
+        let firstNormalCallCount = await calculator.calculateNormalsCallCount
+        XCTAssertEqual(firstNormalCallCount, 1)
         
         model.vertices.append([0, 0, 1])
         _ = await model.cachedNormals(using: calculator)
-        XCTAssertEqual(calculator.calculateNormalsCallCount, 2)
+        let secondNormalCallCount = await calculator.calculateNormalsCallCount
+        XCTAssertEqual(secondNormalCallCount, 2)
     }
     
     func testInitFromPolyhedron() {
@@ -184,7 +194,7 @@ final class PolyhedronModelTests: XCTestCase {
     }
 }
 
-private final class SpyEdgeCalculator: EdgeCalculator {
+private actor SpyEdgeCalculator: EdgeCalculator {
     var calculateEdgesCallCount = 0
     var edgesToReturn: [[Int]]
     
@@ -197,14 +207,12 @@ private final class SpyEdgeCalculator: EdgeCalculator {
         return edgesToReturn
     }
     
-    func faceToEdges(_ face: Face) -> [[Int]] {
+    nonisolated func faceToEdges(_ face: Face) -> [[Int]] {
         return []
     }
 }
 
-extension SpyEdgeCalculator: @unchecked Sendable {}
-
-private final class SpyFaceCalculator: FaceCalculator {
+private actor SpyFaceCalculator: FaceCalculator {
     var calculateCentersCallCount = 0
     var calculateNormalsCallCount = 0
     var centersToReturn: [Vec3]
@@ -225,6 +233,3 @@ private final class SpyFaceCalculator: FaceCalculator {
         return normalsToReturn
     }
 }
-
-extension SpyFaceCalculator: @unchecked Sendable {}
-

@@ -37,6 +37,18 @@ final class CanonicalizationPipelineTests: XCTestCase {
             assertEqual(lhs, rhs, accuracy: 1e-9)
         }
     }
+
+    func testUnavailableExecutorFallsBackToCPU() async {
+        let pipeline = CanonicalizationPipelineActor(
+            executor: MetalExecutor(capabilities: .unavailable)
+        )
+        let vertices = ContiguousArray([Vec3(1, 0, 0), Vec3(0, 1, 0), Vec3(0, 0, 1)])
+
+        let stage = await pipeline.reciprocalC(vertices: vertices)
+
+        XCTAssertFalse(stage.telemetry.usedGPU)
+        XCTAssertEqual(stage.values, CanonicalizationMath.reciprocalC(vertices: vertices))
+    }
     
     private func assertEqual(
         _ lhs: Vec3,
@@ -50,4 +62,3 @@ final class CanonicalizationPipelineTests: XCTestCase {
         XCTAssertEqual(lhs.z, rhs.z, accuracy: accuracy, file: file, line: line)
     }
 }
-
