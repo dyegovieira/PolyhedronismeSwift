@@ -2,14 +2,14 @@ import XCTest
 @testable import PolyhedronismeSwift
 
 final class CanonicalizationPipelineTests: XCTestCase {
-    func testReciprocalC() async {
+    func testReciprocalC() async throws {
         let vertices: [Vec3] = [
             [1.0, 0.0, 0.0],
             [0.0, 1.0, 0.0],
             [0.0, 0.0, 1.0]
         ]
         let pipeline = CanonicalizationPipelineActor(enableMetal: false)
-        let stage = await pipeline.reciprocalC(vertices: ContiguousArray(vertices))
+        let stage = try await pipeline.reciprocalC(vertices: ContiguousArray(vertices))
         let expected = CanonicalizationMath.reciprocalC(vertices: ContiguousArray(vertices))
         
         XCTAssertEqual(stage.values.count, expected.count)
@@ -18,7 +18,7 @@ final class CanonicalizationPipelineTests: XCTestCase {
         }
     }
     
-    func testReciprocalN() async {
+    func testReciprocalN() async throws {
         let vertices: [Vec3] = [
             [1.0, 0.0, 0.0],
             [0.0, 1.0, 0.0],
@@ -30,7 +30,7 @@ final class CanonicalizationPipelineTests: XCTestCase {
             [2, 0, 1]
         ]
         let pipeline = CanonicalizationPipelineActor(enableMetal: false)
-        let stage = await pipeline.reciprocalN(vertices: ContiguousArray(vertices), faces: faces)
+        let stage = try await pipeline.reciprocalN(vertices: ContiguousArray(vertices), faces: faces)
         let expected = CanonicalizationMath.reciprocalN(vertices: ContiguousArray(vertices), faces: faces)
         XCTAssertEqual(stage.values.count, expected.count)
         for (lhs, rhs) in zip(stage.values, expected) {
@@ -38,13 +38,13 @@ final class CanonicalizationPipelineTests: XCTestCase {
         }
     }
 
-    func testUnavailableExecutorFallsBackToCPU() async {
+    func testUnavailableExecutorFallsBackToCPU() async throws {
         let pipeline = CanonicalizationPipelineActor(
             executor: MetalExecutor(capabilities: .unavailable)
         )
         let vertices = ContiguousArray([Vec3(1, 0, 0), Vec3(0, 1, 0), Vec3(0, 0, 1)])
 
-        let stage = await pipeline.reciprocalC(vertices: vertices)
+        let stage = try await pipeline.reciprocalC(vertices: vertices)
 
         XCTAssertFalse(stage.telemetry.usedGPU)
         XCTAssertEqual(stage.values, CanonicalizationMath.reciprocalC(vertices: vertices))

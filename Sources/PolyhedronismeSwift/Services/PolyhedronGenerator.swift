@@ -14,5 +14,8 @@ internal protocol PolyhedronGeneratorProtocol: Sendable {
     var operatorRegistry: OperatorRegistry { get }
     func generate(notation: String) async throws -> PolyhedronModel
     func stream(notation: String) -> AsyncThrowingStream<GenerationEvent, Error>
+    func stream(
+        notation: String,
+        configuration: ParallelismConfiguration?
+    ) -> AsyncThrowingStream<GenerationEvent, Error>
 }
-

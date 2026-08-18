@@ -10,7 +10,6 @@
 import Foundation
 
 internal protocol PolyhedronOperationsProtocol: Sendable {
-    func recenter(_ model: PolyhedronModel, edgeCalculator: EdgeCalculator) async -> PolyhedronModel
+    func recenter(_ model: PolyhedronModel, edgeCalculator: EdgeCalculator) async throws -> PolyhedronModel
     func rescale(_ model: PolyhedronModel) -> PolyhedronModel
 }
-

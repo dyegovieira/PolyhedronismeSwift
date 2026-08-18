@@ -51,29 +51,29 @@ public struct PolyhedronModel: Sendable {
         faces.count
     }
     
-    mutating func cachedEdges(using calculator: EdgeCalculator) async -> [[Int]] {
+    mutating func cachedEdges(using calculator: EdgeCalculator) async throws -> [[Int]] {
         if let edges = geometryCache.edges {
             return edges
         }
-        let computedEdges = await calculator.calculateEdges(from: self)
+        let computedEdges = try await calculator.calculateEdges(from: self)
         geometryCache.edges = computedEdges
         return computedEdges
     }
     
-    mutating func cachedCenters(using calculator: FaceCalculator) async -> [Vec3] {
+    mutating func cachedCenters(using calculator: FaceCalculator) async throws -> [Vec3] {
         if let centers = geometryCache.centers {
             return centers
         }
-        let computedCenters = await calculator.calculateCenters(from: self)
+        let computedCenters = try await calculator.calculateCenters(from: self)
         geometryCache.centers = computedCenters
         return computedCenters
     }
     
-    mutating func cachedNormals(using calculator: FaceCalculator) async -> [Vec3] {
+    mutating func cachedNormals(using calculator: FaceCalculator) async throws -> [Vec3] {
         if let normals = geometryCache.normals {
             return normals
         }
-        let computedNormals = await calculator.calculateNormals(from: self)
+        let computedNormals = try await calculator.calculateNormals(from: self)
         geometryCache.normals = computedNormals
         return computedNormals
     }
@@ -93,4 +93,3 @@ extension PolyhedronModel {
         )
     }
 }
-

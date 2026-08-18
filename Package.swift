@@ -6,10 +6,11 @@ import PackageDescription
 let package = Package(
     name: "PolyhedronismeSwift",
     platforms: [
-        .macOS(.v13),
-        .iOS(.v17),
-        .tvOS(.v17),
-        .watchOS(.v10)
+        .macOS(.v26),
+        .iOS(.v26),
+        .tvOS(.v26),
+        .visionOS(.v26),
+        .watchOS(.v26)
     ],
     products: [
         .library(
@@ -30,6 +31,10 @@ let package = Package(
         ),
         .testTarget(
             name: "PolyhedronismeSwiftTests",
+            dependencies: ["PolyhedronismeSwift"]
+        ),
+        .testTarget(
+            name: "PolyhedronismeSwiftPublicClientTests",
             dependencies: ["PolyhedronismeSwift"]
         ),
     ],

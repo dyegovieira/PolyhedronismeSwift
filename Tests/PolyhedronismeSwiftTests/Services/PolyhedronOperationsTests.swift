@@ -27,7 +27,7 @@ final class PolyhedronOperationsTests: XCTestCase {
             name: "Test"
         )
         
-        let result = await operations.recenter(model, edgeCalculator: edgeCalculator)
+        let result = try await operations.recenter(model, edgeCalculator: edgeCalculator)
         
         XCTAssertEqual(result.vertices.count, model.vertices.count)
         XCTAssertEqual(result.faces, model.faces)
@@ -44,7 +44,7 @@ final class PolyhedronOperationsTests: XCTestCase {
             name: "Empty"
         )
         
-        let result = await operations.recenter(model, edgeCalculator: edgeCalculator)
+        let result = try await operations.recenter(model, edgeCalculator: edgeCalculator)
         XCTAssertEqual(result.vertices, model.vertices)
     }
     
@@ -85,7 +85,7 @@ final class PolyhedronOperationsTests: XCTestCase {
                 []
             }
             
-            func calculateEdges(from polyhedron: PolyhedronModel) async -> [[Int]] {
+            func calculateEdges(from polyhedron: PolyhedronModel) async throws -> [[Int]] {
                 return [[0, 1], [1], [2, 3, 4], [5, 10]]
             }
         }
@@ -97,7 +97,7 @@ final class PolyhedronOperationsTests: XCTestCase {
             name: "Test"
         )
         
-        let result = await operations.recenter(model, edgeCalculator: edgeCalculator)
+        let result = try await operations.recenter(model, edgeCalculator: edgeCalculator)
         
         XCTAssertEqual(result.vertices.count, model.vertices.count)
         XCTAssertEqual(result.faces, model.faces)

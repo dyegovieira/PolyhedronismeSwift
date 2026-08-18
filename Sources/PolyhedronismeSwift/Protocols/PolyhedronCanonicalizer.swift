@@ -10,7 +10,6 @@
 import Foundation
 
 internal protocol PolyhedronCanonicalizer: Sendable {
-    func adjust(_ polyhedron: Polyhedron, iterations: Int) async -> Polyhedron
-    func canonicalize(_ polyhedron: Polyhedron, iterations: Int) async -> Polyhedron
+    func adjust(_ polyhedron: Polyhedron, iterations: Int) async throws -> Polyhedron
+    func canonicalize(_ polyhedron: Polyhedron, iterations: Int) async throws -> Polyhedron
 }
-

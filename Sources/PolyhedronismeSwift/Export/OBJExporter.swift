@@ -25,7 +25,7 @@ internal struct OBJExporter: PolyhedronExporter {
         }
         objstr += "#normal vector defs \n"
         var cacheableModel = polyhedron
-        let normals = await cacheableModel.cachedNormals(using: faceCalculator)
+        let normals = try await cacheableModel.cachedNormals(using: faceCalculator)
         for norm in normals {
             objstr += "vn \(norm[0]) \(norm[1]) \(norm[2])\n"
         }
@@ -41,4 +41,3 @@ internal struct OBJExporter: PolyhedronExporter {
         return objstr
     }
 }
-

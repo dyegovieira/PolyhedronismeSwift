@@ -87,7 +87,7 @@ final class CanonicalizationTests: XCTestCase {
         XCTAssertEqual(canonical.name, poly.name)
     }
     
-    func testCanonicalXYZ() async {
+    func testCanonicalXYZ() async throws {
         let canonicalizer = DefaultPolyhedronCanonicalizer()
         let poly = Polyhedron(
             vertices: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, 0.0]],
@@ -95,13 +95,13 @@ final class CanonicalizationTests: XCTestCase {
             name: "Test"
         )
         
-        let canonical = await canonicalizer.canonicalize(poly, iterations: 1)
+        let canonical = try await canonicalizer.canonicalize(poly, iterations: 1)
         
         XCTAssertGreaterThanOrEqual(canonical.vertices.count, 0)
         XCTAssertGreaterThanOrEqual(canonical.faces.count, 0)
     }
     
-    func testAdjustXYZ() async {
+    func testAdjustXYZ() async throws {
         let canonicalizer = DefaultPolyhedronCanonicalizer()
         let poly = Polyhedron(
             vertices: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
@@ -109,10 +109,9 @@ final class CanonicalizationTests: XCTestCase {
             name: "Test"
         )
         
-        let adjusted = await canonicalizer.adjust(poly, iterations: 1)
+        let adjusted = try await canonicalizer.adjust(poly, iterations: 1)
         
         XCTAssertEqual(adjusted.vertices.count, poly.vertices.count)
         XCTAssertEqual(adjusted.faces.count, poly.faces.count)
     }
 }
-

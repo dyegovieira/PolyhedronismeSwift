@@ -87,4 +87,31 @@ final class GenerationStreamTests: XCTestCase {
 
         XCTAssertFalse(completed)
     }
+
+    func testStreamUsesExplicitConfigurationSnapshotAfterDefaultsChange() async throws {
+        let explicitConfiguration = ParallelismConfiguration(
+            parallelismEnabled: false,
+            maxParallelTasks: 1,
+            minParallelWorkload: 1
+        )
+        let generator = PolyhedronismeSwiftGenerator(parallelismConfiguration: explicitConfiguration)
+        let defaults = PolyhedronismeSwiftConfiguration.shared
+
+        let stream = generator.stream(recipe: "u5I")
+
+        await defaults.setParallelismEnabled(true)
+        await defaults.setMaxParallelTasks(8)
+        await defaults.setMinParallelWorkload(1)
+
+        var streamed: Polyhedron?
+        for try await event in stream {
+            if case .completed(let polyhedron) = event {
+                streamed = polyhedron
+            }
+        }
+
+        let direct = try await generator.generate(recipe: "u5I")
+        XCTAssertEqual(streamed?.vertices, direct.vertices)
+        XCTAssertEqual(streamed?.faces, direct.faces)
+    }
 }

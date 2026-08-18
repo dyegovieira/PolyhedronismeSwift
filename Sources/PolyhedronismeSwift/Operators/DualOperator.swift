@@ -63,7 +63,7 @@ internal struct DualOperator: PolyhedronOperator {
         }
         
         var cacheablePolyhedron = polyhedron
-        let centers = await cacheablePolyhedron.cachedCenters(using: faceCalculator)
+        let centers = try await cacheablePolyhedron.cachedCenters(using: faceCalculator)
         for i in 0..<polyhedron.faces.count {
             flag.newV("\(i)", centers[i])
         }

@@ -23,15 +23,16 @@ internal struct DefaultEdgeCalculator: EdgeCalculator {
         return edges
     }
     
-    public func calculateEdges(from polyhedron: PolyhedronModel) async -> [[Int]] {
+    public func calculateEdges(from polyhedron: PolyhedronModel) async throws -> [[Int]] {
         var uniqueEdges: [EdgeKey: [Int]] = [:]
         let faceCount = polyhedron.faces.count
         guard faceCount > 0 else { return [] }
         
-        let results = await ParallelExecutor.forEach(count: faceCount) { range in
+        let results = try await ParallelExecutor.forEachCancellable(count: faceCount) { range in
             var local: [(Int, [[Int]])] = []
             local.reserveCapacity(range.count)
             for idx in range {
+                try Task.checkCancellation()
                 local.append((idx, self.faceToEdges(polyhedron.faces[idx])))
             }
             return local
@@ -55,4 +56,3 @@ internal struct DefaultEdgeCalculator: EdgeCalculator {
         return Array(uniqueEdges.values)
     }
 }
-

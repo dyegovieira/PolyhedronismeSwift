@@ -64,7 +64,6 @@ func planarize(_ vertices: [Vec3], _ faces: [Face]) -> [Vec3] {
 // combines above three constraint adjustments in iterative cycle
 func canonicalize(_ poly: Polyhedron, _ Niter: Int? = nil) async -> Polyhedron {
     let nIter = Niter ?? 1
-    print("Canonicalizing \(poly.name)...")
     let faces = poly.faces
     let edgeCalculator = DefaultEdgeCalculator()
     var model = PolyhedronModel(
@@ -73,7 +72,7 @@ func canonicalize(_ poly: Polyhedron, _ Niter: Int? = nil) async -> Polyhedron {
         name: poly.name,
         faceClasses: poly.faceClasses
     )
-    let edges = await model.cachedEdges(using: edgeCalculator)
+    let edges = (try? await model.cachedEdges(using: edgeCalculator)) ?? []
     var newVs = poly.vertices
     var maxChange = 1.0 // convergence tracker
     for _ in 0...nIter {
@@ -90,9 +89,6 @@ func canonicalize(_ poly: Polyhedron, _ Niter: Int? = nil) async -> Polyhedron {
     // instabilities that make interesting mutants on multiple applications...
     // more experience will tell what to do
     //newVs = rescale(newVs)
-    print("[canonicalization done, last |deltaV|=\(maxChange)]")
     let newpoly = Polyhedron(vertices: newVs, faces: poly.faces, name: poly.name, faceClasses: poly.faceClasses, recipe: poly.recipe)
-    print("canonicalize \(newpoly)")
     return newpoly
 }
-

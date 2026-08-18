@@ -1,52 +1,71 @@
 # PolyhedronismeSwift
 
-![Swift](https://img.shields.io/badge/Swift-6.2-orange)
-![Platforms](https://img.shields.io/badge/platforms-iOS%20macOS%20tvOS%20watchOS-green)
+![Swift](https://img.shields.io/badge/Swift-6-orange)
+![Platforms](https://img.shields.io/badge/platforms-macOS%20iOS%20tvOS%20visionOS%20watchOS-green)
 ![SPM](https://img.shields.io/badge/SPM-compatible-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
-![Metal](https://img.shields.io/badge/Metal-GPU%20Accelerated-red)
-![Concurrency](https://img.shields.io/badge/Concurrency-Async%2FAwait-blue)
 ![Coverage](https://img.shields.io/badge/coverage-91%25-success)
+![Metal](https://img.shields.io/badge/Metal-4-red)
 
-A modern, high-performance Swift implementation of Conway polyhedral operators for constructing and manipulating polyhedra.
+`PolyhedronismeSwift` is a Swift Package for Conway polyhedral generation and transformation.
 
-## Overview
+Version `1.0.0` is a compute-only release focused on:
 
-**PolyhedronismeSwift** is a powerful Swift package that brings the Conway polyhedral operators to the Apple ecosystem. It allows you to generate, transform, and manipulate complex polyhedral shapes programmatically with ease.
-
-Built from the ground up for modern Swift, it features:
-- **Swift 6.2 Concurrency**: Fully async/await, actor-isolated state, and parallel execution.
-- **Metal Acceleration**: Custom Metal kernels for massive performance gains on compatible devices.
-- **Protocol-Oriented Design**: Flexible, testable, and extensible architecture.
-- **Type Safety**: Robust parameter handling and error propagation.
-
-Whether you're building a 3D modeling tool, a game, or exploring geometric algorithms, PolyhedronismeSwift provides the robust foundation you need.
-
-## Features
-
-- **Advanced Conway Operators**: `Ambo`, `Dual`, `Gyro`, `Kis`, `Propellor`, `Reflect`, `Trisub`.
-- **Diverse Base Generators**: Tetrahedron, Octahedron, Cube, Icosahedron, Dodecahedron, Prism, Antiprism, Pyramid, Cupola, Anticupola.
-- **High Performance**:
-  - **Metal Integration**: GPU-accelerated operators for complex meshes.
-  - **Parallel Processing**: TaskGroup-based concurrency for CPU-bound operations.
-  - **Smart Caching**: Optimized geometry processing.
-- **Modern Swift**: Designed with Swift 6.2 concurrency in mind (Sendable, Actors).
-- **Cross-Platform**: Supports macOS 13+, iOS 17+, tvOS 17+, watchOS 10+.
+- modern Apple platform baselines
+- strict Swift concurrency
+- deterministic CPU correctness
+- Metal 4 GPU acceleration when hardware supports it
 
 ## Requirements
 
-- **Swift**: 6.2+
-- **Platforms**:
-  - macOS 13.0+
-  - iOS 17.0+
-  - tvOS 17.0+
-  - watchOS 10.0+
+- Swift 6.2 toolchain or newer
+- Xcode 26 or newer for Apple SDK 26 platforms
+
+Declared package platforms:
+
+- macOS 26.0+
+- iOS 26.0+
+- tvOS 26.0+
+- visionOS 26.0+
+- watchOS 26.0+
+
+There is no separate `iPadOS` manifest entry in SwiftPM. `.iOS(.v26)` covers iPadOS 26.
+
+## Runtime model
+
+- CPU execution is the baseline on every declared platform.
+- Metal execution is attempted only when the runtime device reports `supportsFamily(.metal4)`.
+- There is no legacy Metal backend anymore.
+- Unsupported hardware falls back to CPU.
+- watchOS is documented as CPU-only unless separate device evidence is added later.
+- Cancellation propagates as cancellation. It does not silently become a CPU completion.
+
+## Public API
+
+Main entry point:
+
+```swift
+import PolyhedronismeSwift
+
+let generator = PolyhedronismeSwiftGenerator()
+```
+
+Public surface includes:
+
+- `PolyhedronismeSwiftGenerator`
+- `PolyhedronismeSwiftProtocol`
+- `Polyhedron`
+- `PolyhedronModel`
+- `Face`
+- `Vec3`
+- `GenerationStage`
+- `GenerationEvent`
+- `PolyhedronMetricsSnapshot`
+- `ParallelismConfiguration`
+- `PolyhedronismeSwiftConfiguration`
+- typed errors including `ParseError`, `PolyhedronError`, `OperatorError`, `GenerationError`, and `MetalError`
 
 ## Installation
-
-### Swift Package Manager
-
-Add `PolyhedronismeSwift` to your project by adding the package dependency in your `Package.swift` file:
 
 ```swift
 dependencies: [
@@ -54,198 +73,160 @@ dependencies: [
 ]
 ```
 
-Then, add it to your target:
+Then add the product to your target:
 
 ```swift
-targets: [
-    .target(
-        name: "YourTarget",
-        dependencies: ["PolyhedronismeSwift"]
-    )
-]
+.target(
+    name: "YourTarget",
+    dependencies: ["PolyhedronismeSwift"]
+)
 ```
-
-Alternatively, in Xcode:
-1. Go to **File > Add Package Dependencies...**
-2. Enter the repository URL: `https://github.com/dyegovieira/PolyhedronismeSwift.git`
-3. Select the version rule (e.g., "Up to Next Major" -> 1.0.0)
 
 ## Usage
 
-### Quick Start
-
-Generating a polyhedron is simple and asynchronous.
+Generate a polyhedron:
 
 ```swift
 import PolyhedronismeSwift
 
-Task {
-    // 1. Initialize the generator
-    let generator = PolyhedronismeSwiftGenerator()
-
-    // 2. Generate a base shape (e.g., Icosahedron)
-    let icosahedron = try await generator.generate(recipe: "I")
-    print("Generated Icosahedron with \(icosahedron.faces.count) faces")
-
-    // 3. Apply operators (e.g., Dual of Kis of Icosahedron)
-    let complexShape = try await generator.generate(recipe: "dkI")
-    print("Generated 'dkI' with \(complexShape.faces.count) faces")
-}
+let generator = PolyhedronismeSwiftGenerator()
+let polyhedron = try await generator.generate(recipe: "dkI")
+print(polyhedron.vertices.count)
+print(polyhedron.faces.count)
 ```
 
-### Advanced Usage: Streaming & Progress
-
-For complex recipes or UI applications, use the streaming API to get real-time progress updates.
+Stream progress:
 
 ```swift
 let generator = PolyhedronismeSwiftGenerator()
 
-do {
-    for try await event in generator.stream(recipe: "gdkI") {
-        switch event {
-        case .stageStarted(let stage):
-            print("🚀 Starting: \(stage.description)")
-        case .stageCompleted(let stage):
-            print("✅ Completed: \(stage.description)")
-        case .metrics(let snapshot):
-            print("📈 Progress: \(snapshot.faceCount) faces generated...")
-        case .completed(let polyhedron):
-            print("✨ Done! Final vertex count: \(polyhedron.vertices.count)")
-        }
+for try await event in generator.stream(recipe: "gkI") {
+    switch event {
+    case .stageStarted(let stage):
+        print("started:", stage.description)
+    case .stageCompleted(let stage):
+        print("completed:", stage.description)
+    case .metrics(let snapshot):
+        print("faces:", snapshot.faceCount)
+    case .completed(let polyhedron):
+        print("done:", polyhedron.name)
     }
-} catch {
-    print("❌ Error: \(error.localizedDescription)")
 }
 ```
 
-### Configuration
-
-PolyhedronismeSwift automatically uses Metal for supported operators when running on a compatible device. You can customize parallelism behavior via `PolyhedronismeSwiftConfiguration`. Note that `PolyhedronismeSwiftConfiguration` is an actor, so you need to use `await` when accessing its properties.
+Per-generator parallelism configuration:
 
 ```swift
-Task {
-    let config = PolyhedronismeSwiftConfiguration.shared
-    
-    // Enable or disable parallelism (default: true)
-    await config.setParallelismEnabled(true)
-    // Or: await config.parallelismEnabled = true
-    
-    // Configure maximum concurrent tasks (default: based on processor count)
-    await config.setMaxParallelTasks(8)
-    // Or: await config.maxParallelTasks = 8
-    
-    // Set threshold for parallel execution (default: 256 faces)
-    await config.setMinParallelWorkload(256)
-    // Or: await config.minParallelWorkload = 256
-}
+let generator = PolyhedronismeSwiftGenerator(
+    parallelismConfiguration: ParallelismConfiguration(
+        parallelismEnabled: true,
+        maxParallelTasks: 8,
+        minParallelWorkload: 256
+    )
+)
 ```
 
-## Conway Notation Guide
+Shared configuration actor:
 
-The library uses standard Conway notation strings to define recipes. Operators are applied from right to left, so `dkI` means "apply Dual, then Kis, starting from Icosahedron".
+```swift
+let config = PolyhedronismeSwiftConfiguration.shared
+await config.setParallelismEnabled(true)
+await config.setMaxParallelTasks(8)
+await config.setMinParallelWorkload(256)
+```
 
-### Base Polyhedra
+## Conway notation
 
-| Symbol | Name | Description |
-|--------|------|-------------|
-| **T** | Tetrahedron | Base Platonic solid |
-| **C** | Cube | Base Platonic solid |
-| **O** | Octahedron | Base Platonic solid |
-| **D** | Dodecahedron | Base Platonic solid |
-| **I** | Icosahedron | Base Platonic solid |
-| **P{n}** | Prism | n-gonal prism (e.g., `P5` for pentagonal prism) |
-| **A{n}** | Antiprism | n-gonal antiprism (e.g., `A6` for hexagonal antiprism) |
-| **Y{n}** | Pyramid | n-gonal pyramid (e.g., `Y4` for square pyramid) |
-| **U{n}** | Cupola | n-gonal cupola (e.g., `U5` for pentagonal cupola) |
-| **V{n}** | Anticupola | n-gonal anticupola (e.g., `V5` for pentagonal anticupola) |
+Base polyhedra:
 
-### Operators
+- `T` tetrahedron
+- `C` cube
+- `O` octahedron
+- `D` dodecahedron
+- `I` icosahedron
+- `P{n}` prism
+- `A{n}` antiprism
+- `Y{n}` pyramid
+- `U{n}` cupola
+- `V{n}` anticupola
 
-| Symbol | Name | Description | Parameters |
-|--------|------|-------------|------------|
-| **d** | Dual | Replaces faces with vertices | None |
-| **a** | Ambo | Truncates edges to new vertices | None |
-| **k** | Kis | Raises pyramids on faces | Optional: `k{n}` where n specifies pyramid height (e.g., `k3I`) |
-| **g** | Gyro | Rotates and subdivides faces | None |
-| **r** | Reflect | Reflects polyhedron | None |
-| **p** | Propellor | Propeller-like transformation | None |
-| **u** | Trisub | Truncates vertices with n-sided faces | Optional: `u{n}` (e.g., `u3I`) |
+Operators:
 
-**Example Recipes:**
-- `kC` (Kis-Cube)
-- `aD` (Ambo-Dodecahedron)
-- `gC` (Gyro-Cube)
-- `dkI` (Dual of Kis of Icosahedron)
-- `tu3I` (Truncated Icosahedron, equivalent to `dk3dI`)
+- `a` ambo
+- `d` dual
+- `g` gyro
+- `k` kis
+- `p` propellor
+- `r` reflect
+- `u` trisub
 
-## Architecture
+Operators apply from right to left. `dkI` means dual of kis of icosahedron.
 
-The project is built with a clean, modular architecture:
+## 1.0.0 notes
 
-- **`PolyhedronismeSwiftGenerator`**: The main public entry point for generating polyhedra.
-- **`PolyhedronOperator`**: Protocol for all geometric transformation operators.
-- **`BasePolyhedronGenerator`**: Protocol for base shape generators.
-- **`DefaultNotationParser`**: Parses Conway notation strings into operation ASTs.
-- **`DefaultPolyhedronGenerator`**: Core generation engine that applies operators sequentially.
-- **`DefaultPolyhedronCanonicalizer`**: Handles geometric canonicalization (recentering, rescaling).
-- **`MetalExecutor`**: Actor-owned boundary for Metal resources, pipelines, command completion, and value-only GPU results.
-- **`PolyhedronismeSwiftConfiguration`**: Actor-based configuration for parallelism settings.
+`1.0.0` intentionally raises the minimum deployment targets to Apple platform version 26.
 
-## Testing & Code Coverage
+It also removes the legacy public `MetalError.commandBufferFailed(_:)` case.
+Use `MetalError.commandFailure(_:)` instead.
 
-PolyhedronismeSwift maintains comprehensive test coverage with a focus on both unit tests and integration tests. The project uses XCTest for all testing.
+See [RELEASE_NOTES.md](RELEASE_NOTES.md) for migration notes.
 
-### Running Tests
+## Validation
 
-Run all tests with Swift 6 strict concurrency checking:
+Recommended strict build:
 
 ```bash
-swift test \
+swift build \
+  --package-path Packages/Libs/PolyhedronismeSwift \
   -Xswiftc -strict-concurrency=complete \
   -Xswiftc -warnings-as-errors
 ```
 
-### Running Tests in Xcode
-
-Open `Packages/Libs/PolyhedronismeSwift` as a standalone Swift package window; do not run the tests from the `SphereBoardGame` host project, which exposes only the library product. Select the `PolyhedronismeSwift` scheme, choose **My Mac**, and use **Product > Test** (`⌘U`).
-
-### Metal Validation
-
-CPU tests are deterministic. Metal execution and CPU/GPU equivalence require a supported Apple device with Metal available; unavailable Metal execution falls back to CPU, while cancellation never does.
-
-### Code Coverage
-
-Generate coverage with Swift Package Manager:
+Recommended strict tests:
 
 ```bash
-swift test --enable-code-coverage
-
-# Generate a detailed report
-xcrun llvm-cov report .build/*/debug/PolyhedronismeSwiftPackageTests.xctest/Contents/MacOS/PolyhedronismeSwiftPackageTests \
-  -instr-profile=.build/*/debug/codecov/default.profdata \
-  -ignore-filename-regex='Tests/' \
-  -arch=$(uname -m)
+swift test \
+  --package-path Packages/Libs/PolyhedronismeSwift \
+  -Xswiftc -strict-concurrency=complete \
+  -Xswiftc -warnings-as-errors
 ```
 
-Coverage highlights:
-- **Error Handling**: All error paths and edge cases are tested
-- **Operators**: Full coverage of all Conway operators (Dual, Kis, Ambo, etc.)
-- **Generators**: Comprehensive tests for all base polyhedron generators
-- **Metal Integration**: Tests include GPU fallback scenarios and error handling
-- **Concurrency**: Actor isolation and parallel execution paths are validated
+Coverage can be generated with:
 
-### Test Organization
+```bash
+swift test \
+  --package-path Packages/Libs/PolyhedronismeSwift \
+  --enable-code-coverage
+```
 
-Tests are organized to match the source structure:
-- `Tests/PolyhedronismeSwiftTests/Operators/` - Operator tests
-- `Tests/PolyhedronismeSwiftTests/Services/` - Service layer tests
-- `Tests/PolyhedronismeSwiftTests/Geometry/` - Geometry utility tests
-- `Tests/PolyhedronismeSwiftTests/Metal/` - Metal integration tests
+Current local snapshot for this `1.0.0` work:
+
+- region coverage: `91.41%`
+- line coverage: `96.88%`
+
+Treat that as a measured validation snapshot, not a permanent badge.
+
+## What is verified vs not verified
+
+Verified in package-level validation:
+
+- strict Swift build
+- strict full package test run: `460` tests, `0` failures
+- code coverage snapshot: `91.41%` regions, `96.88%` lines
+- public-client compile surface
+- stream cancellation and configuration behavior
+- Metal executor unavailable-state behavior
+
+Not claimed here:
+
+- universal GPU performance numbers
+- universal CPU/GPU equivalence across all Metal 4 devices
+- watchOS Metal 4 runtime support
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT. See [LICENSE](LICENSE).
 
 ## Attribution
 
-Based on the original [polyHédronisme](https://github.com/anselmlevskaya/polyhedronisme) by Anselm Levskaya and the mathematical work of [George W. Hart](http://www.georgehart.com/).
+Based on the original [polyHédronisme](https://github.com/anselmlevskaya/polyhedronisme) by Anselm Levskaya and on Conway polyhedral operator work popularized by George W. Hart.

@@ -18,7 +18,6 @@ public enum MetalError: Error, Sendable, LocalizedError {
     case deviceNotFound
     case libraryNotFound
     case functionNotFound(String)
-    case commandBufferFailed(String?)
     
     public var errorDescription: String? {
         switch self {
@@ -38,8 +37,6 @@ public enum MetalError: Error, Sendable, LocalizedError {
             return "Metal library not found"
         case .functionNotFound(let name):
             return "Metal function '\(name)' not found"
-        case .commandBufferFailed(let message):
-            return "Metal command buffer failed: \(message ?? "unknown error")"
         }
     }
 }

@@ -4,13 +4,13 @@ import XCTest
 final class FaceCalculatorTests: XCTestCase {
     private let calculator = DefaultFaceCalculator()
     
-    func testCalculateCenters() async {
+    func testCalculateCenters() async throws {
         let model = PolyhedronModel(
             vertices: [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
             faces: [[0, 1, 2]]
         )
         
-        let centers = await calculator.calculateCenters(from: model)
+        let centers = try await calculator.calculateCenters(from: model)
         XCTAssertEqual(centers.count, 1)
         let center = centers[0]
         XCTAssertEqual(center[0], 1.0/3.0, accuracy: 1e-10)
@@ -18,48 +18,48 @@ final class FaceCalculatorTests: XCTestCase {
         XCTAssertEqual(center[2], 0.0, accuracy: 1e-10)
     }
     
-    func testCalculateCentersWithEmptyFace() async {
+    func testCalculateCentersWithEmptyFace() async throws {
         let model = PolyhedronModel(
             vertices: [[0.0, 0.0, 0.0]],
             faces: [[]]
         )
         
-        let centers = await calculator.calculateCenters(from: model)
+        let centers = try await calculator.calculateCenters(from: model)
         XCTAssertEqual(centers.count, 1)
         XCTAssertEqual(centers[0], Vec3.zero())
     }
     
-    func testCalculateCentersWithSmallFace() async {
+    func testCalculateCentersWithSmallFace() async throws {
         let model = PolyhedronModel(
             vertices: [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]],
             faces: [[0, 1]]
         )
         
-        let centers = await calculator.calculateCenters(from: model)
+        let centers = try await calculator.calculateCenters(from: model)
         XCTAssertEqual(centers.count, 1)
         XCTAssertEqual(centers[0], Vec3.zero())
     }
     
-    func testCalculateCentersWithOutOfBoundsIndex() async {
+    func testCalculateCentersWithOutOfBoundsIndex() async throws {
         let model = PolyhedronModel(
             vertices: [[0.0, 0.0, 0.0]],
             faces: [[0, 1, 2]]
         )
         
-        let centers = await calculator.calculateCenters(from: model)
+        let centers = try await calculator.calculateCenters(from: model)
         XCTAssertEqual(centers.count, 1)
         let center = centers[0]
         XCTAssertEqual(center.count, 3)
         XCTAssertTrue(center.allSatisfy { $0.isFinite })
     }
     
-    func testCalculateNormals() async {
+    func testCalculateNormals() async throws {
         let model = PolyhedronModel(
             vertices: [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
             faces: [[0, 1, 2]]
         )
         
-        let normals = await calculator.calculateNormals(from: model)
+        let normals = try await calculator.calculateNormals(from: model)
         XCTAssertEqual(normals.count, 1)
         let normal = normals[0]
         XCTAssertEqual(normal.count, 3)
@@ -67,18 +67,18 @@ final class FaceCalculatorTests: XCTestCase {
         XCTAssertEqual(magnitude, 1.0, accuracy: 1e-10)
     }
     
-    func testCalculateNormalsWithEmptyFace() async {
+    func testCalculateNormalsWithEmptyFace() async throws {
         let model = PolyhedronModel(
             vertices: [[0.0, 0.0, 0.0]],
             faces: [[]]
         )
         
-        let normals = await calculator.calculateNormals(from: model)
+        let normals = try await calculator.calculateNormals(from: model)
         XCTAssertEqual(normals.count, 1)
         XCTAssertEqual(normals[0], Vec3.zero())
     }
     
-    func testCalculateNormalsWithMultipleFaces() async {
+    func testCalculateNormalsWithMultipleFaces() async throws {
         let model = PolyhedronModel(
             vertices: [
                 [0.0, 0.0, 0.0],
@@ -89,7 +89,7 @@ final class FaceCalculatorTests: XCTestCase {
             faces: [[0, 1, 2], [0, 1, 3]]
         )
         
-        let normals = await calculator.calculateNormals(from: model)
+        let normals = try await calculator.calculateNormals(from: model)
         XCTAssertEqual(normals.count, 2)
         for normal in normals {
             XCTAssertEqual(normal.count, 3)
@@ -97,4 +97,3 @@ final class FaceCalculatorTests: XCTestCase {
         }
     }
 }
-

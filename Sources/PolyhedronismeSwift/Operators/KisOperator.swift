@@ -31,8 +31,6 @@ internal struct KisOperator: ParameterizedPolyhedronOperator {
     }
     
     public func apply(to polyhedron: PolyhedronModel, parameters: KisParameters) async throws -> PolyhedronModel {
-        let start = CFAbsoluteTimeGetCurrent()
-        print("[KisOperator] 🖥️ CPU implementation starting (faces: \(polyhedron.faces.count), vertices: \(polyhedron.vertices.count))...")
         let n = parameters.n
         let apexdist = parameters.apexDistance
         
@@ -43,8 +41,8 @@ internal struct KisOperator: ParameterizedPolyhedronOperator {
         }
         
         var cacheablePolyhedron = polyhedron
-        let normals = await cacheablePolyhedron.cachedNormals(using: faceCalculator)
-        let centers = await cacheablePolyhedron.cachedCenters(using: faceCalculator)
+        let normals = try await cacheablePolyhedron.cachedNormals(using: faceCalculator)
+        let centers = try await cacheablePolyhedron.cachedCenters(using: faceCalculator)
         
         let faceCount = polyhedron.faces.count
         let pendingAssignments = try await ParallelExecutor.forEachCancellable(count: faceCount) { range in
@@ -90,10 +88,6 @@ internal struct KisOperator: ParameterizedPolyhedronOperator {
             name: "k\(n == 0 ? "" : "\(n)")\(polyhedron.name)",
             faceClasses: []
         )
-        
-        let duration = CFAbsoluteTimeGetCurrent() - start
-        print("[KisOperator] ✅ CPU implementation completed in \(String(format: "%.3f", duration))s (result: \(resultModel.faces.count) faces, \(resultModel.vertices.count) vertices)")
-        
         return resultModel
     }
 }

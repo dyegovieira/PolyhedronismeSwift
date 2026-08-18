@@ -19,7 +19,7 @@ final class DefaultPolyhedronCanonicalizerTests: XCTestCase {
         let tetrahedron = try await TetrahedronGenerator().generate()
         let polyhedron = Polyhedron(tetrahedron)
         
-        let result = await canonicalizer.adjust(polyhedron, iterations: 1)
+        let result = try await canonicalizer.adjust(polyhedron, iterations: 1)
         
         XCTAssertEqual(result.vertices.count, polyhedron.vertices.count)
         XCTAssertEqual(result.faces.count, polyhedron.faces.count)
@@ -31,7 +31,7 @@ final class DefaultPolyhedronCanonicalizerTests: XCTestCase {
         let tetrahedron = try await TetrahedronGenerator().generate()
         let polyhedron = Polyhedron(tetrahedron)
         
-        let result = await canonicalizer.canonicalize(polyhedron, iterations: 1)
+        let result = try await canonicalizer.canonicalize(polyhedron, iterations: 1)
         
         XCTAssertEqual(result.vertices.count, polyhedron.vertices.count)
         XCTAssertEqual(result.faces.count, polyhedron.faces.count)
@@ -43,7 +43,7 @@ final class DefaultPolyhedronCanonicalizerTests: XCTestCase {
         let tetrahedron = try await TetrahedronGenerator().generate()
         let polyhedron = Polyhedron(tetrahedron, recipe: "T")
         
-        let result = await canonicalizer.adjust(polyhedron, iterations: 1)
+        let result = try await canonicalizer.adjust(polyhedron, iterations: 1)
         XCTAssertEqual(result.recipe, "T")
     }
     
@@ -52,7 +52,7 @@ final class DefaultPolyhedronCanonicalizerTests: XCTestCase {
         let tetrahedron = try await TetrahedronGenerator().generate()
         let polyhedron = Polyhedron(tetrahedron, recipe: "T")
         
-        let result = await canonicalizer.canonicalize(polyhedron, iterations: 1)
+        let result = try await canonicalizer.canonicalize(polyhedron, iterations: 1)
         XCTAssertEqual(result.recipe, "T")
     }
     
@@ -61,7 +61,7 @@ final class DefaultPolyhedronCanonicalizerTests: XCTestCase {
         let tetrahedron = try await TetrahedronGenerator().generate()
         let polyhedron = Polyhedron(tetrahedron)
         
-        let result = await canonicalizer.canonicalize(polyhedron, iterations: 0)
+        let result = try await canonicalizer.canonicalize(polyhedron, iterations: 0)
         
         XCTAssertEqual(result.vertices.count, polyhedron.vertices.count)
         XCTAssertEqual(result.faces.count, polyhedron.faces.count)

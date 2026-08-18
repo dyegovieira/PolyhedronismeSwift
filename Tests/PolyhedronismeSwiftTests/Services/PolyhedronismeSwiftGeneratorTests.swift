@@ -491,32 +491,9 @@ final class PolyhedronismeSwiftGeneratorTests: XCTestCase {
         XCTAssertFalse(result.vertices.isEmpty)
         XCTAssertFalse(result.faces.isEmpty)
         XCTAssertEqual(result.recipe, "tu3I")
-        
-        // Write the timing result to the temp file immediately
-        let tempFilePath = ".cursor/references/temp"
-        let timeString = """
-Recipe tu3I Performance Measurement
-====================================
-Total time: \(duration)
-Time in seconds: \(String(format: "%.6f", totalSeconds))
-Time in milliseconds: \(String(format: "%.3f", totalMilliseconds))
 
-Note: This measurement includes the generation time for recipe "tu3I" (which is executed as "dkdu3I").
-The test validates that vertices and faces were successfully generated.
-
-"""
-        
-        // Use FileHandle for more reliable writing
-        let fileURL = URL(fileURLWithPath: tempFilePath)
-        if let data = timeString.data(using: .utf8) {
-            try? data.write(to: fileURL, options: .atomic)
-        }
-        
-        // Also print it for visibility (this helps with debugging)
-        print("\n=== tu3I Performance ===")
-        print("Total time: \(duration)")
-        print("Time in seconds: \(String(format: "%.6f", totalSeconds))")
-        print("Time in milliseconds: \(String(format: "%.3f", totalMilliseconds))")
-        print("========================\n")
+        XCTAssertGreaterThan(duration.components.seconds, -1)
+        XCTAssertGreaterThan(totalSeconds, 0)
+        XCTAssertGreaterThan(totalMilliseconds, 0)
     }
 }

@@ -62,25 +62,25 @@ final class PolyhedronModelTests: XCTestCase {
         XCTAssertEqual(emptyModel.faceCount, 0)
     }
     
-    func testEdgesAreCachedUntilGeometryChanges() async {
+    func testEdgesAreCachedUntilGeometryChanges() async throws {
         var model = PolyhedronModel(
             vertices: [[0, 0, 0], [1, 0, 0], [0, 1, 0]],
             faces: [[0, 1, 2]]
         )
         let calculator = SpyEdgeCalculator(edgesToReturn: [[0, 1], [1, 2], [2, 0]])
         
-        _ = await model.cachedEdges(using: calculator)
-        _ = await model.cachedEdges(using: calculator)
+        _ = try await model.cachedEdges(using: calculator)
+        _ = try await model.cachedEdges(using: calculator)
         let firstEdgeCallCount = await calculator.calculateEdgesCallCount
         XCTAssertEqual(firstEdgeCallCount, 1)
         
         model.vertices.append([0, 0, 1])
-        _ = await model.cachedEdges(using: calculator)
+        _ = try await model.cachedEdges(using: calculator)
         let secondEdgeCallCount = await calculator.calculateEdgesCallCount
         XCTAssertEqual(secondEdgeCallCount, 2)
     }
     
-    func testCentersCacheInvalidatesOnFaceMutation() async {
+    func testCentersCacheInvalidatesOnFaceMutation() async throws {
         var model = PolyhedronModel(
             vertices: [[0, 0, 0], [1, 0, 0], [0, 1, 0]],
             faces: [[0, 1, 2]]
@@ -90,19 +90,19 @@ final class PolyhedronModelTests: XCTestCase {
             normalsToReturn: [[0.0, 0.0, 1.0]]
         )
         
-        _ = await model.cachedCenters(using: calculator)
-        _ = await model.cachedCenters(using: calculator)
+        _ = try await model.cachedCenters(using: calculator)
+        _ = try await model.cachedCenters(using: calculator)
         let firstCenterCallCount = await calculator.calculateCentersCallCount
         XCTAssertEqual(firstCenterCallCount, 1)
         
         // Test didSet observer with direct assignment
         model.faces = [[0, 1, 2], [0, 2, 1]]
-        _ = await model.cachedCenters(using: calculator)
+        _ = try await model.cachedCenters(using: calculator)
         let secondCenterCallCount = await calculator.calculateCentersCallCount
         XCTAssertEqual(secondCenterCallCount, 2)
     }
     
-    func testCentersCacheInvalidatesOnFaceDirectAssignment() async {
+    func testCentersCacheInvalidatesOnFaceDirectAssignment() async throws {
         var model = PolyhedronModel(
             vertices: [[0, 0, 0], [1, 0, 0], [0, 1, 0]],
             faces: [[0, 1, 2]]
@@ -112,36 +112,36 @@ final class PolyhedronModelTests: XCTestCase {
             normalsToReturn: [[0.0, 0.0, 1.0]]
         )
         
-        _ = await model.cachedCenters(using: calculator)
+        _ = try await model.cachedCenters(using: calculator)
         let initialCenterCallCount = await calculator.calculateCentersCallCount
         XCTAssertEqual(initialCenterCallCount, 1)
         
         // Direct assignment should trigger didSet
         model.faces = [[0, 1, 2], [1, 2, 0]]
-        _ = await model.cachedCenters(using: calculator)
+        _ = try await model.cachedCenters(using: calculator)
         let invalidatedCenterCallCount = await calculator.calculateCentersCallCount
         XCTAssertEqual(invalidatedCenterCallCount, 2)
     }
     
-    func testEdgesCacheInvalidatesOnVerticesDirectAssignment() async {
+    func testEdgesCacheInvalidatesOnVerticesDirectAssignment() async throws {
         var model = PolyhedronModel(
             vertices: [[0, 0, 0], [1, 0, 0], [0, 1, 0]],
             faces: [[0, 1, 2]]
         )
         let calculator = SpyEdgeCalculator(edgesToReturn: [[0, 1], [1, 2], [2, 0]])
         
-        _ = await model.cachedEdges(using: calculator)
+        _ = try await model.cachedEdges(using: calculator)
         let initialEdgeCallCount = await calculator.calculateEdgesCallCount
         XCTAssertEqual(initialEdgeCallCount, 1)
         
         // Direct assignment should trigger didSet
         model.vertices = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]]
-        _ = await model.cachedEdges(using: calculator)
+        _ = try await model.cachedEdges(using: calculator)
         let invalidatedEdgeCallCount = await calculator.calculateEdgesCallCount
         XCTAssertEqual(invalidatedEdgeCallCount, 2)
     }
     
-    func testNormalsCacheInvalidatesOnVertexMutation() async {
+    func testNormalsCacheInvalidatesOnVertexMutation() async throws {
         var model = PolyhedronModel(
             vertices: [[0, 0, 0], [1, 0, 0], [0, 1, 0]],
             faces: [[0, 1, 2]]
@@ -151,13 +151,13 @@ final class PolyhedronModelTests: XCTestCase {
             normalsToReturn: [[0.0, 0.0, 1.0]]
         )
         
-        _ = await model.cachedNormals(using: calculator)
-        _ = await model.cachedNormals(using: calculator)
+        _ = try await model.cachedNormals(using: calculator)
+        _ = try await model.cachedNormals(using: calculator)
         let firstNormalCallCount = await calculator.calculateNormalsCallCount
         XCTAssertEqual(firstNormalCallCount, 1)
         
         model.vertices.append([0, 0, 1])
-        _ = await model.cachedNormals(using: calculator)
+        _ = try await model.cachedNormals(using: calculator)
         let secondNormalCallCount = await calculator.calculateNormalsCallCount
         XCTAssertEqual(secondNormalCallCount, 2)
     }
@@ -202,7 +202,7 @@ private actor SpyEdgeCalculator: EdgeCalculator {
         self.edgesToReturn = edgesToReturn
     }
     
-    func calculateEdges(from polyhedron: PolyhedronModel) async -> [[Int]] {
+    func calculateEdges(from polyhedron: PolyhedronModel) async throws -> [[Int]] {
         calculateEdgesCallCount += 1
         return edgesToReturn
     }
@@ -223,12 +223,12 @@ private actor SpyFaceCalculator: FaceCalculator {
         self.normalsToReturn = normalsToReturn
     }
     
-    func calculateCenters(from polyhedron: PolyhedronModel) async -> [Vec3] {
+    func calculateCenters(from polyhedron: PolyhedronModel) async throws -> [Vec3] {
         calculateCentersCallCount += 1
         return centersToReturn
     }
     
-    func calculateNormals(from polyhedron: PolyhedronModel) async -> [Vec3] {
+    func calculateNormals(from polyhedron: PolyhedronModel) async throws -> [Vec3] {
         calculateNormalsCallCount += 1
         return normalsToReturn
     }

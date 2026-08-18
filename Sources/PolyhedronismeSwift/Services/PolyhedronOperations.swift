@@ -12,9 +12,9 @@ import Foundation
 internal struct DefaultPolyhedronOperations: PolyhedronOperationsProtocol {
     internal init() {}
     
-    internal func recenter(_ model: PolyhedronModel, edgeCalculator: EdgeCalculator) async -> PolyhedronModel {
+    internal func recenter(_ model: PolyhedronModel, edgeCalculator: EdgeCalculator) async throws -> PolyhedronModel {
         var cacheableModel = model
-        let edges = await cacheableModel.cachedEdges(using: edgeCalculator)
+        let edges = try await cacheableModel.cachedEdges(using: edgeCalculator)
         let edgecenters = edges.map { edge in
             guard edge.count == 2,
                   edge[0] < cacheableModel.vertices.count,
@@ -69,4 +69,3 @@ internal struct DefaultPolyhedronOperations: PolyhedronOperationsProtocol {
         )
     }
 }
-

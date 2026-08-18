@@ -16,14 +16,15 @@ internal struct DefaultFaceCalculator: FaceCalculator {
         self.vertexCalculator = vertexCalculator
     }
     
-    public func calculateCenters(from polyhedron: PolyhedronModel) async -> [Vec3] {
+    public func calculateCenters(from polyhedron: PolyhedronModel) async throws -> [Vec3] {
         let faceCount = polyhedron.faces.count
         guard faceCount > 0 else { return [] }
         
-        let results = await ParallelExecutor.forEach(count: faceCount) { range in
+        let results = try await ParallelExecutor.forEachCancellable(count: faceCount) { range in
             var local: [(Int, Vec3)] = []
             local.reserveCapacity(range.count)
             for idx in range {
+                try Task.checkCancellation()
                 local.append((idx, self.center(for: idx, polyhedron: polyhedron)))
             }
             return local
@@ -38,14 +39,15 @@ internal struct DefaultFaceCalculator: FaceCalculator {
         return centers
     }
     
-    public func calculateNormals(from polyhedron: PolyhedronModel) async -> [Vec3] {
+    public func calculateNormals(from polyhedron: PolyhedronModel) async throws -> [Vec3] {
         let faceCount = polyhedron.faces.count
         guard faceCount > 0 else { return [] }
         
-        let results = await ParallelExecutor.forEach(count: faceCount) { range in
+        let results = try await ParallelExecutor.forEachCancellable(count: faceCount) { range in
             var local: [(Int, Vec3)] = []
             local.reserveCapacity(range.count)
             for idx in range {
+                try Task.checkCancellation()
                 local.append((idx, self.normal(for: idx, polyhedron: polyhedron)))
             }
             return local
@@ -81,4 +83,3 @@ internal struct DefaultFaceCalculator: FaceCalculator {
         return GeometryUtils.calculateNormal(faceVertices)
     }
 }
-

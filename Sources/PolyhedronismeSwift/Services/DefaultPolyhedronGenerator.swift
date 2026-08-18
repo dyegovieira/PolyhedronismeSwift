@@ -45,15 +45,24 @@ internal struct DefaultPolyhedronGenerator: PolyhedronGeneratorProtocol {
     }
     
     public func stream(notation: String) -> AsyncThrowingStream<GenerationEvent, Error> {
+        stream(notation: notation, configuration: ParallelismRequestContext.configuration)
+    }
+
+    public func stream(
+        notation: String,
+        configuration: ParallelismConfiguration?
+    ) -> AsyncThrowingStream<GenerationEvent, Error> {
         AsyncThrowingStream { continuation in
             let producer = Task(priority: .userInitiated) {
                 do {
-                    let configuration = if let requestConfiguration = ParallelismRequestContext.configuration {
+                    let resolvedConfiguration = if let configuration {
+                        configuration
+                    } else if let requestConfiguration = ParallelismRequestContext.configuration {
                         requestConfiguration
                     } else {
                         await PolyhedronismeSwiftConfiguration.shared.snapshot()
                     }
-                    let model = try await ParallelismRequestContext.$configuration.withValue(configuration) {
+                    let model = try await ParallelismRequestContext.$configuration.withValue(resolvedConfiguration) {
                         try await self.generateAsync(notation: notation, eventHandler: { event in
                             switch continuation.yield(event) {
                             case .terminated:
@@ -190,7 +199,7 @@ internal struct DefaultPolyhedronGenerator: PolyhedronGeneratorProtocol {
         
         try emit(.stageStarted(.canonicalize), to: eventHandler)
         var workingModel = polyModel
-        workingModel = await operations.recenter(workingModel, edgeCalculator: edgeCalculator)
+        workingModel = try await operations.recenter(workingModel, edgeCalculator: edgeCalculator)
         workingModel = operations.rescale(workingModel)
         try Task.checkCancellation()
         try emit(.stageCompleted(.canonicalize), to: eventHandler)

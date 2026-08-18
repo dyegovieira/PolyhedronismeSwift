@@ -52,11 +52,6 @@ public struct PolyhedronismeSwiftGenerator: PolyhedronismeSwiftProtocol, Sendabl
     }
     
     public func stream(recipe: String) -> AsyncThrowingStream<GenerationEvent, Error> {
-        if let parallelismConfiguration {
-            return ParallelismRequestContext.$configuration.withValue(parallelismConfiguration) {
-                generator.stream(notation: recipe)
-            }
-        }
-        return generator.stream(notation: recipe)
+        generator.stream(notation: recipe, configuration: parallelismConfiguration)
     }
 }

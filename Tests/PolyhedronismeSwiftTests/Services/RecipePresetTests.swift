@@ -113,7 +113,7 @@ final class RecipePresetTests: XCTestCase {
                 name: polyhedron.name,
                 faceClasses: polyhedron.faceClasses
             )
-            let edges = await model.cachedEdges(using: edgeCalculator)
+            let edges = try await model.cachedEdges(using: edgeCalculator)
             
             XCTAssertFalse(edges.isEmpty, "Recipe \(preset.notation) has no edges")
             
@@ -142,7 +142,7 @@ final class RecipePresetTests: XCTestCase {
                 name: polyhedron.name,
                 faceClasses: polyhedron.faceClasses
             )
-            let centers = await model.cachedCenters(using: faceCalculator)
+            let centers = try await model.cachedCenters(using: faceCalculator)
             
             XCTAssertEqual(centers.count, polyhedron.faces.count, "Recipe \(preset.notation) has mismatched face center count")
             
@@ -166,7 +166,7 @@ final class RecipePresetTests: XCTestCase {
                 name: polyhedron.name,
                 faceClasses: polyhedron.faceClasses
             )
-            let normals = await model.cachedNormals(using: faceCalculator)
+            let normals = try await model.cachedNormals(using: faceCalculator)
             
             XCTAssertEqual(normals.count, polyhedron.faces.count, "Recipe \(preset.notation) has mismatched face normal count")
             

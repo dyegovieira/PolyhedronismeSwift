@@ -44,7 +44,7 @@ actor CanonicalizationPipelineActor {
         self.metalExecutor = enableMetal ? executor : nil
     }
 
-    func reciprocalC(vertices: ContiguousArray<Vec3>) async -> CanonicalizationStageResult {
+    func reciprocalC(vertices: ContiguousArray<Vec3>) async throws -> CanonicalizationStageResult {
         let start = ContinuousClock.now
         if enableMetal, !vertices.isEmpty, let metalExecutor {
             do {
@@ -58,8 +58,7 @@ actor CanonicalizationPipelineActor {
                     telemetry: CanonicalizationTelemetry(stage: .reciprocalC, duration: duration, usedGPU: true)
                 )
             } catch is CancellationError {
-                // This legacy non-throwing API cannot surface cancellation. The
-                // enclosing generator checks cancellation at its stage boundary.
+                throw CancellationError()
             } catch {
                 // Metal availability and execution failures recover via CPU.
             }
@@ -74,7 +73,7 @@ actor CanonicalizationPipelineActor {
         )
     }
 
-    func reciprocalN(vertices: ContiguousArray<Vec3>, faces: [Face]) async -> CanonicalizationStageResult {
+    func reciprocalN(vertices: ContiguousArray<Vec3>, faces: [Face]) async throws -> CanonicalizationStageResult {
         let start = ContinuousClock.now
         if enableMetal, !vertices.isEmpty, !faces.isEmpty, let metalExecutor {
             do {
@@ -88,7 +87,7 @@ actor CanonicalizationPipelineActor {
                     telemetry: CanonicalizationTelemetry(stage: .reciprocalN, duration: duration, usedGPU: true)
                 )
             } catch is CancellationError {
-                // See reciprocalC.
+                throw CancellationError()
             } catch {
                 // Metal availability and execution failures recover via CPU.
             }

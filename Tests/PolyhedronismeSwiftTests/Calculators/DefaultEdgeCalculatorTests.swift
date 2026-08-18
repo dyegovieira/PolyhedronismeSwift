@@ -26,14 +26,14 @@ final class DefaultEdgeCalculatorTests: XCTestCase {
         XCTAssertTrue(edges.isEmpty)
     }
     
-    func testCalculateEdges() async {
+    func testCalculateEdges() async throws {
         let model = PolyhedronModel(
             vertices: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
             faces: [[0, 1, 2]],
             name: "Test"
         )
         
-        let edges = await calculator.calculateEdges(from: model)
+        let edges = try await calculator.calculateEdges(from: model)
         
         XCTAssertFalse(edges.isEmpty)
         for edge in edges {
@@ -41,14 +41,14 @@ final class DefaultEdgeCalculatorTests: XCTestCase {
         }
     }
     
-    func testCalculateEdgesWithDuplicateEdges() async {
+    func testCalculateEdgesWithDuplicateEdges() async throws {
         let model = PolyhedronModel(
             vertices: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
             faces: [[0, 1, 2], [0, 2, 1]],
             name: "Test"
         )
         
-        let edges = await calculator.calculateEdges(from: model)
+        let edges = try await calculator.calculateEdges(from: model)
         
         let uniqueEdgeCount = Set(edges.map { "\($0[0])-\($0[1])" }).count
         XCTAssertEqual(uniqueEdgeCount, edges.count)
@@ -62,4 +62,3 @@ final class DefaultEdgeCalculatorTests: XCTestCase {
         XCTAssertEqual(keyA.upper, 5)
     }
 }
-

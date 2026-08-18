@@ -11,7 +11,7 @@ import Foundation
 
 internal struct PrismParameters: Sendable {
     public let n: Int
-    
+
     public init(n: Int) {
         self.n = n
     }
@@ -19,16 +19,16 @@ internal struct PrismParameters: Sendable {
 
 internal struct PrismGenerator: ParameterizedBasePolyhedronGenerator {
     public typealias Parameters = PrismParameters
-    
+
     public let identifier: String = "P"
     private let canonicalizer: PolyhedronCanonicalizer
-    
+
     public init(canonicalizer: PolyhedronCanonicalizer = DefaultPolyhedronCanonicalizer()) {
         self.canonicalizer = canonicalizer
     }
-    
+
     public func generate(parameters: PrismParameters) async throws -> PolyhedronModel {
-        let poly = await buildPrism(parameters.n)
+        let poly = try await buildPrism(parameters.n)
         return PolyhedronModel(
             vertices: poly.vertices,
             faces: poly.faces,
@@ -36,8 +36,8 @@ internal struct PrismGenerator: ParameterizedBasePolyhedronGenerator {
             faceClasses: poly.faceClasses
         )
     }
-    
-    private func buildPrism(_ n: Int) async -> Polyhedron {
+
+    private func buildPrism(_ n: Int) async throws -> Polyhedron {
         let theta = 2 * GeometryConstants.pi / Double(n)
         let h = sin(theta / 2)
         var poly = Polyhedron()
@@ -50,12 +50,11 @@ internal struct PrismGenerator: ParameterizedBasePolyhedronGenerator {
             let a = Double(i) * theta
             poly.vertices.append([-cos(a), -sin(a), h])
         }
-        poly.faces.append(__range__(n-1, 0, true))
-        poly.faces.append(__range__(n, 2*n, false))
+        poly.faces.append(__range__(n - 1, 0, true))
+        poly.faces.append(__range__(n, 2 * n, false))
         for i in 0..<n {
-            poly.faces.append([i, (i+1)%n, ((i+1)%n)+n, i+n])
+            poly.faces.append([i, (i + 1) % n, ((i + 1) % n) + n, i + n])
         }
-        return await canonicalizer.adjust(poly, iterations: 1)
+        return try await canonicalizer.adjust(poly, iterations: 1)
     }
 }
-

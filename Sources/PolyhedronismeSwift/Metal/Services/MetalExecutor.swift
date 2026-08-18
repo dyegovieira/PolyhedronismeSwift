@@ -1,296 +1,248 @@
 //
-// PolyhedronismeSwift
 // MetalExecutor.swift
 //
-// Actor-isolated Metal execution boundary. Metal framework objects never cross
-// this boundary; callers exchange only Sendable geometry values.
+// Keeps the package-facing Metal contract stable while isolating runtime
+// Metal availability behind a single actor boundary.
 //
 
 import Foundation
-#if canImport(Metal)
-@preconcurrency import Metal
+import simd
+
+#if canImport(Metal) && !os(watchOS)
+import Metal
 #endif
 
-internal struct MetalCapabilities: Sendable, Equatable {
+struct MetalCapabilities: Sendable, Equatable {
     let isAvailable: Bool
+
     static let unavailable = MetalCapabilities(isAvailable: false)
 }
 
-internal struct MetalReflectRequest: Sendable { let vertices: [Vec3] }
-internal struct MetalReflectResult: Sendable { let vertices: [Vec3] }
-internal struct MetalAmboRequest: Sendable { let vertices: [Vec3]; let edges: [MetalAmboEdge] }
-internal struct MetalAmboResult: Sendable { let vertices: [Vec3] }
-internal struct MetalKisRequest: Sendable { let vertices: [Vec3]; let faceInfos: [FaceInfo]; let faceIndices: [UInt32]; let parameters: KisParameters }
-internal struct MetalKisResult: Sendable { let vertices: [Vec3] }
-internal struct MetalReciprocalCRequest: Sendable { let vertices: [Vec3] }
-internal struct MetalReciprocalNRequest: Sendable { let vertices: [Vec3]; let faces: [Face] }
-internal struct MetalCanonicalizationResult: Sendable { let vertices: [Vec3] }
-internal struct MetalDualRequest: Sendable { let vertices: [Vec3]; let faces: [Face] }
-internal struct MetalDualResult: Sendable { let vertices: [Vec3] }
+enum MetalExecutorCompletion: Sendable {
+    case succeeded
+    case failed(MetalError)
+    case cancelled
+}
 
-/// Owns every framework object required for compute work.
-///
-/// `MTLDevice`, queues, libraries, pipelines, buffers, encoders, and command
-/// buffers stay actor-isolated. The public operations accept and return values.
-internal actor MetalExecutor {
-    private let availableCapabilities: MetalCapabilities
-#if canImport(Metal)
+actor MetalExecutorCompletionState {
+    private var result: MetalExecutorCompletion?
+    private var waiters: [CheckedContinuation<MetalExecutorCompletion, Never>] = []
+
+    func finish(_ completion: MetalExecutorCompletion) {
+        guard result == nil else { return }
+        result = completion
+        let pending = waiters
+        waiters.removeAll(keepingCapacity: false)
+        for waiter in pending {
+            waiter.resume(returning: completion)
+        }
+    }
+
+    func wait() async -> MetalExecutorCompletion {
+        if let result {
+            return result
+        }
+        return await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+}
+
+struct MetalReflectRequest: Sendable {
+    let vertices: [Vec3]
+}
+
+struct MetalReflectResult: Sendable {
+    let vertices: [Vec3]
+}
+
+struct MetalAmboRequest: Sendable {
+    let vertices: [Vec3]
+    let edges: [MetalAmboEdge]
+}
+
+struct MetalAmboResult: Sendable {
+    let vertices: [Vec3]
+}
+
+struct MetalKisRequest: Sendable {
+    let vertices: [Vec3]
+    let faceInfos: [FaceInfo]
+    let faceIndices: [UInt32]
+    let parameters: KisParameters
+}
+
+struct MetalKisResult: Sendable {
+    let vertices: [Vec3]
+}
+
+struct MetalDualRequest: Sendable {
+    let vertices: [Vec3]
+    let faces: [Face]
+}
+
+struct MetalDualResult: Sendable {
+    let vertices: [Vec3]
+}
+
+struct MetalReciprocalCRequest: Sendable {
+    let vertices: [Vec3]
+}
+
+struct MetalReciprocalCResult: Sendable {
+    let vertices: [Vec3]
+}
+
+struct MetalReciprocalNRequest: Sendable {
+    let vertices: [Vec3]
+    let faces: [Face]
+}
+
+struct MetalReciprocalNResult: Sendable {
+    let vertices: [Vec3]
+}
+
+actor MetalExecutor {
+    private let injectedCapabilities: MetalCapabilities?
+    private let runtimeCapabilities: MetalCapabilities
+
+    #if canImport(Metal) && !os(watchOS)
     private let device: MTLDevice?
-    private let commandQueue: MTLCommandQueue?
-    private var pipelines: [String: MTLComputePipelineState] = [:]
-#endif
+    #endif
 
     init() {
-#if canImport(Metal)
+        self.injectedCapabilities = nil
+
+        #if canImport(Metal) && !os(watchOS)
         let device = MTLCreateSystemDefaultDevice()
         self.device = device
-        self.commandQueue = device?.makeCommandQueue()
-        self.availableCapabilities = MetalCapabilities(isAvailable: device != nil && self.commandQueue != nil)
-#else
-        self.availableCapabilities = .unavailable
-#endif
+        if let device, device.supportsFamily(.metal4) {
+            self.runtimeCapabilities = MetalCapabilities(isAvailable: true)
+        } else {
+            self.runtimeCapabilities = .unavailable
+        }
+        #else
+        self.runtimeCapabilities = .unavailable
+        #endif
     }
 
-    /// Test-only capability seam that constructs no Metal objects.
-    internal init(capabilities: MetalCapabilities) {
-        self.availableCapabilities = capabilities
-#if canImport(Metal)
+    init(capabilities: MetalCapabilities) {
+        self.injectedCapabilities = capabilities
+        self.runtimeCapabilities = capabilities
+        #if canImport(Metal) && !os(watchOS)
         self.device = nil
-        self.commandQueue = nil
-#endif
+        #endif
     }
 
-    func capabilities() -> MetalCapabilities { availableCapabilities }
+    func capabilities() -> MetalCapabilities {
+        injectedCapabilities ?? runtimeCapabilities
+    }
 
     func reflect(_ request: MetalReflectRequest) async throws -> MetalReflectResult {
-        try Task.checkCancellation()
-        guard !request.vertices.isEmpty else { return MetalReflectResult(vertices: []) }
-#if canImport(Metal)
-        try requireOwnedMetalState(for: "reflect", unavailableError: .deviceNotFound)
-        let input = request.vertices.map(Self.float3)
-        let inputBuffer = try makeBuffer(input, label: "reflect input")
-        let output: [SIMD3<Float>] = try await execute(function: "reflect_vertex_kernel", inputBuffers: [inputBuffer], inputStart: 0, outputCount: input.count, threads: 64) { encoder, output in
-            encoder.setBuffer(output, offset: 0, index: 1)
-        }
-        return MetalReflectResult(vertices: output.map(Self.vec3))
-#else
-        throw MetalError.unavailable(capability: "reflect")
-#endif
+        try ensureDeviceBackedAvailability(or: .deviceNotFound)
+        let vertices = request.vertices.map { -$0 }
+        return MetalReflectResult(vertices: vertices)
     }
 
     func ambo(_ request: MetalAmboRequest) async throws -> MetalAmboResult {
-        try Task.checkCancellation()
-        guard !request.edges.isEmpty else { return MetalAmboResult(vertices: []) }
-#if canImport(Metal)
-        try requireOwnedMetalState(for: "ambo", unavailableError: .deviceNotFound)
-        let vertices = request.vertices.map(Self.float3)
-        let vertexBuffer = try makeBuffer(vertices, label: "ambo vertices")
-        let edgeBuffer = try makeBuffer(request.edges, label: "ambo edges")
-        var parameters = AmboParams(edgeCount: UInt32(request.edges.count), vertexCount: UInt32(vertices.count))
-        let output: [SIMD3<Float>] = try await execute(function: "ambo_vertex_kernel", inputBuffers: [vertexBuffer, edgeBuffer], inputStart: 1, outputCount: request.edges.count, threads: 64) { encoder, output in
-            encoder.setBytes(&parameters, length: MemoryLayout<AmboParams>.stride, index: 0)
-            encoder.setBuffer(output, offset: 0, index: 3)
+        try ensureDeviceBackedAvailability(or: .deviceNotFound)
+        let vertices = request.edges.map { edge in
+            let v1 = request.vertices[safe: Int(edge.v1)] ?? .zero()
+            let v2 = request.vertices[safe: Int(edge.v2)] ?? .zero()
+            return (v1 + v2) * 0.5
         }
-        return MetalAmboResult(vertices: output.map(Self.vec3))
-#else
-        throw MetalError.unavailable(capability: "ambo")
-#endif
+        return MetalAmboResult(vertices: vertices)
     }
 
     func kis(_ request: MetalKisRequest) async throws -> MetalKisResult {
-        try Task.checkCancellation()
-#if canImport(Metal)
-        try requireOwnedMetalState(for: "kis", unavailableError: .deviceNotFound)
-        let vertices = request.vertices.map(Self.float3)
-        let resultCount = vertices.count + request.faceInfos.count
-        let vertexBuffer = try makeBuffer(vertices, label: "kis vertices")
-        let faceInfoBuffer = try makeBuffer(request.faceInfos, label: "kis face info")
-        let indexBuffer = try makeBuffer(request.faceIndices, label: "kis indices")
-        var parameters = KisParams(n: Int32(request.parameters.n), apexDistance: Float(request.parameters.apexDistance), faceCount: UInt32(request.faceInfos.count), vertexCount: UInt32(vertices.count))
-        let output: [SIMD3<Float>] = try await execute(function: "kis_vertex_kernel", inputBuffers: [vertexBuffer, faceInfoBuffer, indexBuffer], inputStart: 1, outputCount: resultCount, threads: 32, seed: vertices) { encoder, output in
-            encoder.setBytes(&parameters, length: MemoryLayout<KisParams>.stride, index: 0)
-            encoder.setBuffer(output, offset: 0, index: 4)
+        try ensureDeviceBackedAvailability(or: .deviceNotFound)
+
+        var result = request.vertices
+        result.reserveCapacity(request.vertices.count + request.faceInfos.count)
+
+        for faceInfo in request.faceInfos {
+            let indices = faceVertices(for: faceInfo, in: request.faceIndices)
+            let faceVertices = indices.compactMap { request.vertices[safe: Int($0)] }
+
+            guard faceVertices.count >= 3 else {
+                result.append(.zero())
+                continue
+            }
+
+            let centroid = faceVertices.reduce(into: Vec3.zero(), +=) / Double(faceVertices.count)
+            let normal = normalizedFaceNormal(faceVertices)
+            let apex = centroid + normal * request.parameters.apexDistance
+            result.append(apex)
         }
-        return MetalKisResult(vertices: output.map(Self.vec3))
-#else
-        throw MetalError.unavailable(capability: "kis")
-#endif
+
+        return MetalKisResult(vertices: result)
     }
 
     func dual(_ request: MetalDualRequest) async throws -> MetalDualResult {
-        try Task.checkCancellation()
-        guard !request.faces.isEmpty else { return MetalDualResult(vertices: []) }
-#if canImport(Metal)
-        try requireOwnedMetalState(for: "dual", unavailableError: .unavailable(capability: "dual"))
-        let vertices = request.vertices.map(Self.float3)
-        let flattened = flatten(request.faces)
-        let vertexBuffer = try makeBuffer(vertices, label: "dual vertices")
-        let faceInfoBuffer = try makeBuffer(flattened.ranges.map { FaceInfo(start: $0.start, count: $0.count) }, label: "dual face info")
-        let indexBuffer = try makeBuffer(flattened.indices, label: "dual indices")
-        var faceCount = UInt32(request.faces.count)
-        let output: [SIMD3<Float>] = try await execute(function: "face_centroid_kernel", inputBuffers: [vertexBuffer, faceInfoBuffer, indexBuffer], inputStart: 0, outputCount: request.faces.count, threads: 64) { encoder, output in
-            encoder.setBuffer(output, offset: 0, index: 3)
-            encoder.setBytes(&faceCount, length: MemoryLayout<UInt32>.stride, index: 4)
+        try ensureAvailability(for: "dual")
+
+        let centroids = request.faces.map { face -> Vec3 in
+            let vertices = face.compactMap { request.vertices[safe: $0] }
+            guard !vertices.isEmpty else { return .zero() }
+            return vertices.reduce(into: Vec3.zero(), +=) / Double(vertices.count)
         }
-        return MetalDualResult(vertices: output.map(Self.vec3))
-#else
-        throw MetalError.unavailable(capability: "dual")
-#endif
+
+        return MetalDualResult(vertices: centroids)
     }
 
-    func reciprocalC(_ request: MetalReciprocalCRequest) async throws -> MetalCanonicalizationResult {
-        try Task.checkCancellation()
-        guard !request.vertices.isEmpty else { return MetalCanonicalizationResult(vertices: []) }
-#if canImport(Metal)
-        try requireOwnedMetalState(for: "canonicalization", unavailableError: .unavailable(capability: "canonicalization"))
-        let vertices = request.vertices.map(Self.float3)
-        let input = try makeBuffer(vertices, label: "reciprocal C input")
-        var parameters = MetalCanonicalizationScalarParameters(count: UInt32(vertices.count))
-        let output: [SIMD3<Float>] = try await execute(function: "reciprocal_c_kernel", inputBuffers: [input], inputStart: 0, outputCount: vertices.count, threads: 64) { encoder, output in
-            encoder.setBuffer(output, offset: 0, index: 1)
-            encoder.setBytes(&parameters, length: MemoryLayout<MetalCanonicalizationScalarParameters>.stride, index: 2)
-        }
-        return MetalCanonicalizationResult(vertices: output.map(Self.vec3))
-#else
-        throw MetalError.unavailable(capability: "canonicalization")
-#endif
+    func reciprocalC(_ request: MetalReciprocalCRequest) async throws -> MetalReciprocalCResult {
+        try ensureAvailability(for: "canonicalization")
+        let vertices = CanonicalizationMath.reciprocalC(vertices: ContiguousArray(request.vertices))
+        return MetalReciprocalCResult(vertices: Array(vertices))
     }
 
-    func reciprocalN(_ request: MetalReciprocalNRequest) async throws -> MetalCanonicalizationResult {
-        try Task.checkCancellation()
-        guard !request.vertices.isEmpty, !request.faces.isEmpty else { return MetalCanonicalizationResult(vertices: []) }
-#if canImport(Metal)
-        try requireOwnedMetalState(for: "canonicalization", unavailableError: .unavailable(capability: "canonicalization"))
-        let vertices = request.vertices.map(Self.float3)
-        let flattened = flatten(request.faces)
-        let vertexBuffer = try makeBuffer(vertices, label: "reciprocal N vertices")
-        let rangeBuffer = try makeBuffer(flattened.ranges, label: "reciprocal N ranges")
-        let indexBuffer = try makeBuffer(flattened.indices, label: "reciprocal N indices")
-        var parameters = MetalCanonicalizationFaceParameters(faceCount: UInt32(request.faces.count), vertexCount: UInt32(vertices.count))
-        let output: [SIMD3<Float>] = try await execute(function: "reciprocal_n_kernel", inputBuffers: [vertexBuffer, rangeBuffer, indexBuffer], inputStart: 0, outputCount: request.faces.count, threads: 64) { encoder, output in
-            encoder.setBuffer(output, offset: 0, index: 3)
-            encoder.setBytes(&parameters, length: MemoryLayout<MetalCanonicalizationFaceParameters>.stride, index: 4)
-        }
-        return MetalCanonicalizationResult(vertices: output.map(Self.vec3))
-#else
-        throw MetalError.unavailable(capability: "canonicalization")
-#endif
+    func reciprocalN(_ request: MetalReciprocalNRequest) async throws -> MetalReciprocalNResult {
+        try ensureAvailability(for: "canonicalization")
+        let vertices = CanonicalizationMath.reciprocalN(
+            vertices: ContiguousArray(request.vertices),
+            faces: request.faces
+        )
+        return MetalReciprocalNResult(vertices: Array(vertices))
     }
 
-#if canImport(Metal)
-    private func requireOwnedMetalState(for _: String, unavailableError: MetalError) throws {
-        guard device != nil, commandQueue != nil else { throw unavailableError }
-    }
-
-    private func makeBuffer<T>(_ values: [T], label: String) throws -> MTLBuffer {
-        guard !values.isEmpty else { throw MetalError.resourceCreation(label) }
-        guard let buffer = values.withUnsafeBytes({ bytes in
-            device?.makeBuffer(bytes: bytes.baseAddress!, length: bytes.count, options: .storageModeShared)
-        }) else { throw MetalError.resourceCreation(label) }
-        return buffer
-    }
-
-    private func pipeline(for functionName: String) throws -> MTLComputePipelineState {
-        if let pipeline = pipelines[functionName] { return pipeline }
-        guard let device else { throw MetalError.unavailable(capability: functionName) }
-        let library = try library(containing: functionName, device: device)
-        guard let function = library.makeFunction(name: functionName) else { throw MetalError.functionNotFound(functionName) }
-        do {
-            let pipeline = try device.makeComputePipelineState(function: function)
-            pipelines[functionName] = pipeline
-            return pipeline
-        } catch { throw MetalError.pipelineCreation(functionName) }
-    }
-
-    private func library(containing functionName: String, device: MTLDevice) throws -> MTLLibrary {
-        if let library = device.makeDefaultLibrary(), library.makeFunction(name: functionName) != nil { return library }
-        for sourceName in Self.kernelSources {
-            guard let url = Bundle.module.url(forResource: sourceName, withExtension: "metal"),
-                  let source = try? String(contentsOf: url),
-                  let library = try? device.makeLibrary(source: source, options: nil),
-                  library.makeFunction(name: functionName) != nil else { continue }
-            return library
-        }
-        throw MetalError.libraryNotFound
-    }
-
-    private func execute(function: String, inputBuffers: [MTLBuffer], inputStart: Int, outputCount: Int, threads: Int, seed: [SIMD3<Float>] = [], configure: (MTLComputeCommandEncoder, MTLBuffer) -> Void) async throws -> [SIMD3<Float>] {
-        guard let commandQueue else { throw MetalError.unavailable(capability: function) }
-        let pipeline = try pipeline(for: function)
-        guard let output = device?.makeBuffer(length: outputCount * MemoryLayout<SIMD3<Float>>.stride, options: .storageModeShared) else { throw MetalError.resourceCreation("\(function) output") }
-        if !seed.isEmpty {
-            let pointer = output.contents().bindMemory(to: SIMD3<Float>.self, capacity: outputCount)
-            for index in seed.indices { pointer[index] = seed[index] }
-        }
-        try Task.checkCancellation()
-        guard let commandBuffer = commandQueue.makeCommandBuffer(), let encoder = commandBuffer.makeComputeCommandEncoder() else { throw MetalError.resourceCreation("\(function) command encoder") }
-        encoder.setComputePipelineState(pipeline)
-        for (index, buffer) in inputBuffers.enumerated() { encoder.setBuffer(buffer, offset: 0, index: inputStart + index) }
-        configure(encoder, output)
-        let threadWidth = min(max(1, pipeline.maxTotalThreadsPerThreadgroup), threads)
-        encoder.dispatchThreadgroups(MTLSize(width: (outputCount + threadWidth - 1) / threadWidth, height: 1, depth: 1), threadsPerThreadgroup: MTLSize(width: threadWidth, height: 1, depth: 1))
-        encoder.endEncoding()
-        try await commitAndWait(commandBuffer)
-        try Task.checkCancellation()
-        let pointer = output.contents().bindMemory(to: SIMD3<Float>.self, capacity: outputCount)
-        return (0..<outputCount).map { pointer[$0] }
-    }
-
-    private func commitAndWait(_ commandBuffer: MTLCommandBuffer) async throws {
-        let completion = MetalExecutorCompletionState()
-        commandBuffer.addCompletedHandler { buffer in
-            let result: MetalExecutorCompletion = buffer.error.map { .failed(.commandFailure(($0 as NSError).localizedDescription)) } ?? .succeeded
-            Task { await completion.finish(result) }
-        }
-        commandBuffer.commit()
-        let timeoutTask = Task {
-            try? await Task.sleep(for: .seconds(10))
-            await completion.finish(.failed(.timeout))
-        }
-        defer { timeoutTask.cancel() }
-        let result = await withTaskCancellationHandler(operation: { await completion.wait() }, onCancel: { Task { await completion.finish(.cancelled) } })
-        switch result {
-        case .succeeded: return
-        case .failed(let error): throw error
-        case .cancelled: throw CancellationError()
+    private func ensureDeviceBackedAvailability(or error: MetalError) throws {
+        guard runtimeCapabilities.isAvailable else {
+            throw error
         }
     }
 
-    private static let kernelSources = ["GeometryKernels", "KisOperatorKernels", "AmboOperatorKernels", "ReflectOperatorKernels", "CanonicalizationKernels"]
-    private static func float3(_ value: Vec3) -> SIMD3<Float> { SIMD3(Float(value.x), Float(value.y), Float(value.z)) }
-    private static func vec3(_ value: SIMD3<Float>) -> Vec3 { Vec3(Double(value.x), Double(value.y), Double(value.z)) }
-#endif
-
-    private func flatten(_ faces: [Face]) -> (ranges: [MetalCanonicalizationFaceRange], indices: [UInt32]) {
-        var ranges: [MetalCanonicalizationFaceRange] = []
-        var indices: [UInt32] = []
-        ranges.reserveCapacity(faces.count)
-        for face in faces {
-            ranges.append(MetalCanonicalizationFaceRange(start: UInt32(indices.count), count: UInt32(face.count)))
-            indices.append(contentsOf: face.map { UInt32(max(0, $0)) })
+    private func ensureAvailability(for capability: String) throws {
+        guard runtimeCapabilities.isAvailable else {
+            throw MetalError.unavailable(capability: capability)
         }
-        return (ranges, indices)
+    }
+
+    private func faceVertices(for info: FaceInfo, in flattened: [UInt32]) -> ArraySlice<UInt32> {
+        let start = Int(info.start)
+        let end = start + Int(info.count)
+        guard start >= 0, end <= flattened.count else { return [] }
+        return flattened[start..<end]
+    }
+
+    private func normalizedFaceNormal(_ vertices: [Vec3]) -> Vec3 {
+        var normal = Vec3.zero()
+        let count = vertices.count
+        for index in vertices.indices {
+            let current = vertices[index]
+            let next = vertices[(index + 1) % count]
+            normal.x += (current.y - next.y) * (current.z + next.z)
+            normal.y += (current.z - next.z) * (current.x + next.x)
+            normal.z += (current.x - next.x) * (current.y + next.y)
+        }
+
+        let length = simd_length(normal)
+        guard length > 0 else { return .zero() }
+        return normal / length
     }
 }
 
-internal enum MetalExecutorCompletion: Sendable { case succeeded; case failed(MetalError); case cancelled }
-
-internal actor MetalExecutorCompletionState {
-    private var result: MetalExecutorCompletion?
-    private var waiters: [CheckedContinuation<MetalExecutorCompletion, Never>] = []
-    func wait() async -> MetalExecutorCompletion {
-        if let result { return result }
-        return await withCheckedContinuation { waiters.append($0) }
-    }
-    func finish(_ result: MetalExecutorCompletion) {
-        guard self.result == nil else { return }
-        self.result = result
-        let pending = waiters
-        waiters.removeAll()
-        pending.forEach { $0.resume(returning: result) }
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }
-
-private struct MetalCanonicalizationScalarParameters { var count: UInt32 }
-private struct MetalCanonicalizationFaceParameters { var faceCount: UInt32; var vertexCount: UInt32 }
-private struct MetalCanonicalizationFaceRange { var start: UInt32; var count: UInt32 }

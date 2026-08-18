@@ -30,7 +30,9 @@ internal struct DefaultPolyhedronMetrics: PolyhedronMetricsCalculator {
     
     internal func calculateMinEdgeLength(from model: PolyhedronModel, edgeCalculator: EdgeCalculator) async -> Double {
         var cacheableModel = model
-        let edges = await cacheableModel.cachedEdges(using: edgeCalculator)
+        guard let edges = try? await cacheableModel.cachedEdges(using: edgeCalculator) else {
+            return .greatestFiniteMagnitude
+        }
         var min2 = Double.greatestFiniteMagnitude
         for e in edges {
             guard e.count == 2,
@@ -55,7 +57,9 @@ internal struct DefaultPolyhedronMetrics: PolyhedronMetricsCalculator {
     ) async -> Double {
         var min2 = Double.greatestFiniteMagnitude
         var cacheableModel = model
-        let centers = await cacheableModel.cachedCenters(using: faceCalculator)
+        guard let centers = try? await cacheableModel.cachedCenters(using: faceCalculator) else {
+            return .greatestFiniteMagnitude
+        }
         
         for (faceIndex, face) in cacheableModel.faces.enumerated() {
             guard faceIndex < centers.count else { continue }
@@ -81,4 +85,3 @@ internal struct DefaultPolyhedronMetrics: PolyhedronMetricsCalculator {
         return sqrt(min2)
     }
 }
-

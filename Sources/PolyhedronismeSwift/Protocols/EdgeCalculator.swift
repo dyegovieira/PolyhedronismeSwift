@@ -10,7 +10,6 @@
 import Foundation
 
 internal protocol EdgeCalculator: Sendable {
-    func calculateEdges(from polyhedron: PolyhedronModel) async -> [[Int]]
+    func calculateEdges(from polyhedron: PolyhedronModel) async throws -> [[Int]]
     func faceToEdges(_ face: Face) -> [[Int]]
 }
-

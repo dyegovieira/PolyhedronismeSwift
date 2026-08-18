@@ -10,7 +10,6 @@
 import Foundation
 
 internal protocol FaceCalculator: Sendable {
-    func calculateCenters(from polyhedron: PolyhedronModel) async -> [Vec3]
-    func calculateNormals(from polyhedron: PolyhedronModel) async -> [Vec3]
+    func calculateCenters(from polyhedron: PolyhedronModel) async throws -> [Vec3]
+    func calculateNormals(from polyhedron: PolyhedronModel) async throws -> [Vec3]
 }
-

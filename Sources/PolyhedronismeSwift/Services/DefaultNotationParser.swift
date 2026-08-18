@@ -56,7 +56,6 @@ internal struct DefaultNotationParser: NotationParser {
     
     private func getOps(_ notation: String) throws -> String {
         let expanded = try applySpecialReplacements(notation)
-        print("\(notation) executed as \(expanded)")
         return expanded
     }
     
@@ -124,4 +123,3 @@ internal struct DefaultNotationParser: NotationParser {
         return result
     }
 }
-
